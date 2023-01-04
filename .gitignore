@@ -130,3 +130,8 @@ dmypy.json
 
 # VSCode workspaces
 *.code-workspace
+
+# Training data
+training_data/raw
+training_data/*.mp4
+.DS_Store
