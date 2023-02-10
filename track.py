@@ -12,9 +12,12 @@ from tools.yolov7 import Yolov7Wrapper
 def run(opt):
 	# Get arguments
 	source, save_path, yolo_weights, deepsort_weights, device = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.deepsort_weights, opt.device
- 
+	
 	# Get hyperparameters
 	max_cos_dist, nn_budget, iou_th, conf_th, max_track_age = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.max_track_age
+
+	# Initialise paused flag
+	paused = False
 
 	# Initialise YOLOv7 wrapper for player and referee detection
 	yolov7 = Yolov7Wrapper(device, yolo_weights, iou_th=iou_th, conf_th=conf_th)
@@ -97,11 +100,23 @@ def run(opt):
 		# Display processing frame to user
 		cv2.imshow("Processing...", frame)
   
-		# Check if user has terminated the process by pressing 'q'
+		# Check if q is pressed to stop tracking
 		if cv2.waitKey(1) & 0xFF == ord('q'):
-			print("<< User has terminated the process >>")
 			break
-
+		# Check if p is pressed to pause tracking
+		elif cv2.waitKey(1) & 0xFF == ord('p'):
+			paused = True
+   
+		# Handle pause state
+		while paused:
+			# Check if n is pressed to step to next frame
+			if cv2.waitKey(1) & 0xFF == ord('n'):
+				break
+			# Check if r is pressed to resume tracking
+			elif cv2.waitKey(1) & 0xFF == ord('r'):
+				paused = False
+				break
+					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start
 		i += 1
