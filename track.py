@@ -60,10 +60,11 @@ def run(opt):
 			break
 
 		# Run court segmentation
-		frame = yolov7_seg.detect(frame)
+		masked_frame = yolov7_seg.detect(frame)
   
-		# Convert frame to RGB for YOLO
+		# Convert frames to RGB
 		frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+		masked_frame = cv2.cvtColor(masked_frame, cv2.COLOR_BGR2RGB)
   
 		# Use YOLO to detect players and referees
 		detections = yolov7.detect(frame, draw_bboxes=False)
@@ -76,6 +77,8 @@ def run(opt):
 
 			# Convert bboxes to xyxy format for DeepSORT #TODO: Double check deepsort format
 			bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
+   
+		frame = masked_frame
 			
 		# Get indices of the players (0) and referees (1)
 		classes = classes.flatten().astype(int)
