@@ -8,13 +8,14 @@ import numpy as np
 
 from tools.deepsort import DeepSortWrapper
 from tools.yolov7 import Yolov7Wrapper
+from tools.yolov7_seg import Yolov7SegWrapper
 
 def run(opt):
 	# Get arguments
-	source, save_path, yolo_weights, deepsort_weights, device = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.deepsort_weights, opt.device
+	source, save_path, yolo_weights, yolo_seg_weights, deepsort_weights, device = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.yolo_seg_weights, opt.deepsort_weights, opt.device
 	
 	# Get hyperparameters
-	max_cos_dist, nn_budget, iou_th, conf_th, max_track_age = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.max_track_age
+	max_cos_dist, nn_budget, iou_th, conf_th, iou_th_seg, conf_th_seg, max_track_age = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.iou_th_seg, opt.conf_th_seg, opt.max_track_age
 
 	# Initialise paused flag
 	paused = False
@@ -25,6 +26,9 @@ def run(opt):
 	# initialize DeepSORT trackers for each players and referee
 	player_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, class_name="player")
 	referee_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, class_name="referee")
+
+	# Initialise YoloV7 Instance Segmentation wrapper for court detection
+	yolov7_seg = Yolov7SegWrapper(device, yolo_seg_weights, iou_th=iou_th_seg, conf_th=conf_th_seg)
 
 	# Get the video from the source
 	video = cv2.VideoCapture(source)
@@ -54,10 +58,13 @@ def run(opt):
 		# Check if video has ended
 		if not ret:
 			break
-		
+
+		# Run court segmentation
+		frame = yolov7_seg.detect(frame)
+  
 		# Convert frame to RGB for YOLO
 		frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
+  
 		# Use YOLO to detect players and referees
 		detections = yolov7.detect(frame, draw_bboxes=False)
 		
@@ -130,6 +137,7 @@ if __name__ == "__main__":
 	parser.add_argument("--source", type=str, default="./data/input.mp4", help="Path to a basketball video")
 	parser.add_argument("--save_path", type=str, default="./data/output.mp4", help="Path to save the output video to")
 	parser.add_argument("--yolo_weights", type=str, default="./weights/cleanedDatasetWeights.pt", help="Path to the YOLO weights file (.pt)")
+	parser.add_argument("--yolo_seg_weights", type=str, default="./weights/best.pt", help="Path to the YOLO segmentation weights file (.pt)")
 	parser.add_argument("--deepsort_weights", type=str, default="./weights/market1501.pb", help="Path to the DeepSORT weights file (.pb)")
 	parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
  
@@ -139,6 +147,10 @@ if __name__ == "__main__":
 	parser.add_argument("--iou_th", type=float, default=0.2, help="IOU threshold for non-max suppression")
 	parser.add_argument("--conf_th", type=float, default=0.2, help="Confidence threshold for non-max suppression")
 	parser.add_argument("--max_track_age", type=int, default=300, help="Maximum number of frames to keep a track alive")
+	
+	# YOLOv7 Segmentation Hyperparameters
+	parser.add_argument("--conf_th_seg", type=float, default=0.5, help="Confidence threshold for segmentation")
+	parser.add_argument("--iou_th_seg", type=float, default=0.5, help="IOU threshold for segmentation")
 	
 	opt = parser.parse_args()
 	print(opt)
