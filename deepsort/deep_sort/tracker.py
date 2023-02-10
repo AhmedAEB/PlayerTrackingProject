@@ -140,7 +140,6 @@ class Tracker:
                	self.n_init,
                 self.max_age,
             	detection.feature,
-				detection.class_name,
             )
         )
         self._next_id += 1
