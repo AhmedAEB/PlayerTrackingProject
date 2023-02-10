@@ -8,7 +8,7 @@ conda activate <env_name>
 conda install pytorch torchvision torchaudio -yc pytorch
 ```
 ```shell
-conda install -y numpy opencv tensorflow matplotlib pandas tqdm scikit-learn pyyaml seaborn
+conda install -y numpy opencv tensorflow matplotlib pandas tqdm scikit-learn pyyaml seaborn onnx
 ```
 
 Then Run:
