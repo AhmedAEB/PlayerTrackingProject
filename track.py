@@ -15,7 +15,7 @@ def run(opt):
 	source, save_path, yolo_weights, yolo_seg_weights, deepsort_weights, device = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.yolo_seg_weights, opt.deepsort_weights, opt.device
 	
 	# Get hyperparameters
-	max_cos_dist, nn_budget, iou_th, conf_th, iou_th_seg, conf_th_seg, max_track_age = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.iou_th_seg, opt.conf_th_seg, opt.max_track_age
+	max_cos_dist, nn_budget, iou_th, conf_th, iou_th_seg, conf_th_seg, max_track_age, init_phase_frames = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.iou_th_seg, opt.conf_th_seg, opt.max_track_age, opt.init_phase_frames
 
 	# Initialise paused flag
 	paused = False
@@ -24,8 +24,8 @@ def run(opt):
 	yolov7 = Yolov7Wrapper(device, yolo_weights, iou_th=iou_th, conf_th=conf_th)
 
 	# initialize DeepSORT trackers for each players and referee
-	player_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, class_name="player")
-	referee_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, class_name="referee")
+	player_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="player")
+	referee_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="referee")
 
 	# Initialise YoloV7 Instance Segmentation wrapper for court detection
 	yolov7_seg = Yolov7SegWrapper(device, yolo_seg_weights, iou_th=iou_th_seg, conf_th=conf_th_seg)
@@ -41,14 +41,15 @@ def run(opt):
 	codec = cv2.VideoWriter_fourcc(*"avc1")
 	output = cv2.VideoWriter(save_path, codec, fps, (w, h))
 
-	# Initialise time accumulator
+	# Initialise variables for tracking
 	total_time = 0
+	max_mask_area = 0
  
 	# Get total number of frames
 	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
 
 	# Loop through all frames
-	for i in trange(total_frames, desc="YOLOv7 + DeepSORT"):
+	for i in trange(total_frames, desc="YOLOv7 + DeepSORT + YOLACT"):
 		# Start timer for current frame
 		start = perf_counter()
 
@@ -61,6 +62,49 @@ def run(opt):
 
 		# Run court segmentation
 		masked_frame = yolov7_seg.detect(frame)
+  
+		# Convert to binary image
+		binary = cv2.cvtColor(masked_frame, cv2.COLOR_BGR2GRAY)
+		_, binary = cv2.threshold(binary, 0, 255, cv2.THRESH_BINARY)
+  
+		# Calculate the percentage area of the detected mask (white pixels)
+		mask_area = np.sum(binary == 255) / (w * h)
+  
+		# Display a line 10% of the way from the left and right of the frame
+		cv2.line(frame, (w//20, 0), (w//20, h), (0, 255, 0), 2)
+		cv2.line(frame, (w - w//20, 0), (w - w//20, h), (0, 255, 0), 2)
+  
+		# Find contours
+		cnts = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+		cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+		# Approximate the contours
+		if len(cnts) > 0:
+			epsilon = 0.01 * cv2.arcLength(cnts[-1], True)
+			approx = cv2.approxPolyDP(cnts[-1], epsilon, True)
+			# Draw the contours
+			cv2.drawContours(frame, [approx], -1, (0, 0, 255), 2)
+			# Draw polygon on a blank binary image
+			blank = np.zeros_like(binary)
+			cv2.drawContours(blank, [approx], -1, (255, 255, 255), -1)
+
+			# Corner detection using good features to track
+			corners = cv2.goodFeaturesToTrack(blank, 4, 0.01, 10)
+			corners = np.int0(corners)
+			for corner in corners:
+				x, y = corner.ravel()
+				cv2.circle(frame, (x, y), 5, (0, 255, 0), -1)
+
+			# Display the polygon
+			cv2.imshow("Polygon", blank)
+   
+		# Keep track of the maximum mask area frame if the first and last 5% lines do not contain any white pixels
+		if mask_area > max_mask_area and (binary[:, w//20] == 0).all() and (binary[:, w - w//20] == 0).all():
+			max_mask_area = mask_area
+			max_mask_frame = frame
+			cv2.imwrite("./data/max_mask_frame.jpg", max_mask_frame)
+  
+		# Display the binary image
+		cv2.imshow("Mask", binary)
   
 		# Convert frames to RGB
 		frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -77,8 +121,6 @@ def run(opt):
 
 			# Convert bboxes to xyxy format for DeepSORT #TODO: Double check deepsort format
 			bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
-   
-		frame = masked_frame
 			
 		# Get indices of the players (0) and referees (1)
 		classes = classes.flatten().astype(int)
@@ -93,12 +135,8 @@ def run(opt):
 		player_tracker.update(frame, player_bboxes, player_scores.flatten())
 		referee_tracker.update(frame, referee_bboxes, referee_scores.flatten())
 		
-		# write to output video
-		frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-		output.write(frame)
-		
 		# Draw white square in top left corner for text
-		cv2.rectangle(frame, (0, 0), (170, 100), (255, 255, 255), -1)
+		cv2.rectangle(frame, (0, 0), (185, 130), (255, 255, 255), -1)
 		
 		# Add fps to display frame
 		cv2.putText(frame, f"FPS: {1/(perf_counter()-start):.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
@@ -106,6 +144,13 @@ def run(opt):
 		# Add number of objects to display frame, split into players and referees
 		cv2.putText(frame, f"Players: {len(player_tracker.tracker.tracks)}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 		cv2.putText(frame, f"Referees: {len(referee_tracker.tracker.tracks)}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+  
+		# Add mask area to display frame
+		cv2.putText(frame, f"Mask: {mask_area*100:.2f}%", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+		
+		# Write to output video
+		frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+		output.write(frame)
 		
 		# Display processing frame to user
 		cv2.imshow("Processing...", frame)
@@ -150,7 +195,8 @@ if __name__ == "__main__":
 	parser.add_argument("--iou_th", type=float, default=0.2, help="IOU threshold for non-max suppression")
 	parser.add_argument("--conf_th", type=float, default=0.2, help="Confidence threshold for non-max suppression")
 	parser.add_argument("--max_track_age", type=int, default=300, help="Maximum number of frames to keep a track alive")
-	
+	parser.add_argument("--init_phase_frames", type=int, default=6, help="Number of frames a track is initialised for")
+ 
 	# YOLOv7 Segmentation Hyperparameters
 	parser.add_argument("--conf_th_seg", type=float, default=0.5, help="Confidence threshold for segmentation")
 	parser.add_argument("--iou_th_seg", type=float, default=0.5, help="IOU threshold for segmentation")
