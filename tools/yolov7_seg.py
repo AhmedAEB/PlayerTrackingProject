@@ -34,7 +34,6 @@ class Yolov7SegWrapper():
 	
 	@smart_inference_mode()
 	def detect(self, img, draw_masks = True):
-  
 		# Make a copy of the original image
 		orig = img.copy()
 
@@ -57,14 +56,12 @@ class Yolov7SegWrapper():
 		with self.dt[2]:
 			pred = non_max_suppression(pred, self.conf_th, self.iou_th, nm=32)
 
-
 		dets = pred[0]
-  
-		#annotator = Annotator(orig, line_width=2, example=str(self.names))
-  
+
 		# If no detections, return original image or None
 		if not len(dets):
-			return orig if draw_masks else None
+			# Return black image same size as original image
+			return torch.zeros(orig.shape, dtype=torch.uint8).numpy()
    
 		# Process detections and extract masks
 		masks = process_mask(proto[0], dets[:, 6:], dets[:, :4], img.shape[2:], upsample=True)  # HWC
@@ -74,8 +71,9 @@ class Yolov7SegWrapper():
 	
 		# Draw masks on image
 		if draw_masks:
-			mcolors = [colors(int(cls), True) for cls in dets[:, 5]]
-			im_masks = plot_masks(img[0], masks, mcolors)  # image with masks shape(imh,imw,3)
+			# Create black image same size as img[0] using torch
+			black_img = torch.zeros(img[0].shape, dtype=torch.uint8)
+			im_masks = plot_masks(black_img, masks, [(255, 255, 255)], alpha=1)  # image with masks shape(imh,imw,3)
 			final_img = scale_masks(img.shape[2:], im_masks, orig.shape)  # scale to original h, w
 		
 		return final_img if draw_masks else orig
