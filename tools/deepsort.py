@@ -10,9 +10,9 @@ from deepsort.deep_sort.tracker import Tracker
 from yolov7.utils.plots import plot_one_box
 
 class DeepSortWrapper():
-	def __init__(self, deepsort_weights, cosine_thresh, nn_budget, max_track_age, class_name):
+	def __init__(self, deepsort_weights, cosine_thresh, nn_budget, max_track_age, init_phase_frames, class_name):
 		self.encoder = create_box_encoder(deepsort_weights, batch_size=1)
-		self.tracker = Tracker(NearestNeighborDistanceMetric("cosine", cosine_thresh, nn_budget), max_age=max_track_age)
+		self.tracker = Tracker(NearestNeighborDistanceMetric("euclidean", cosine_thresh, nn_budget), max_age=max_track_age, n_init=init_phase_frames)
 		self.colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(1000)]
 		self.class_name = class_name
 
@@ -24,6 +24,7 @@ class DeepSortWrapper():
 		self.tracker.update(dets)
   
 		for track in self.tracker.tracks:
+			# Skip tracks that are not confirmed or have not been updated for a long time
 			if not track.is_confirmed() or track.time_since_update > 1:
 				continue
 			
@@ -32,3 +33,7 @@ class DeepSortWrapper():
 			label = f"{track.track_id} : {self.class_name.title()}"
 
 			plot_one_box(xyxy, frame, label=label, color=self.colors[track.track_id], line_thickness=2)
+   
+		return 
+   
+# Path: tools/generate_detections.py
