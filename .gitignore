@@ -132,7 +132,9 @@ dmypy.json
 *.code-workspace
 .vscode/
 
-# Training data
-training_data/raw
-training_data/*.mp4
+# Training data and Weight files
+data
+weights
+
+# Mac OS
 .DS_Store
