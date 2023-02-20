@@ -11,7 +11,7 @@ from tools.yolov7 import Yolov7Wrapper
 from tools.yolov7_seg import Yolov7SegWrapper
 
 def convertMaskToPolygon(binaryMask):
-    # Find contours
+	# Find contours
 	contours, _ = cv2.findContours(binaryMask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 	
 	# Get the largest contour
@@ -30,8 +30,8 @@ def convertMaskToPolygon(binaryMask):
 	return blank
 
 def getCornerPoints(polygon):
-    # Run a line in each direction along the polygon and 
-    # record the coordinates of the first non-zero pixels
+	# Run a line in each direction along the polygon and 
+	# record the coordinates of the first non-zero pixels
 	corners = []
 	for i in range(polygon.shape[0]):
 		# Check if the row contains any white pixels
@@ -123,7 +123,6 @@ def run(opt):
 
 	# Initialise variables for tracking
 	total_time = 0
-	max_mask_area = 0
  
 	# Get total number of frames
 	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -163,7 +162,7 @@ def run(opt):
    
 			# Extract the top left, top right, bottom left and bottom right corners of the polygon
 			corners = getCornerPoints(polygon)
-    
+	
 			# Compare the top left and bottom left corners
 			if corners[0][0] > corners[2][0]:
 				state = "Left"
@@ -175,7 +174,7 @@ def run(opt):
 				# Free Throw Coordinates of 4 corners in order (top left, top right, bottom left, bottom right)
 				# (1521, 473) (1890, 473) (1521, 782) (1890, 782) 
 				diagram_corners = np.array([[1521, 473], [1890, 473], [1521, 782], [1890, 782]], dtype=np.float32)
-    
+	
 			# Make the corners blue, red, green, yellow respectively
 			cv2.circle(frame, (corners[0][0], corners[0][1]), 5, (255, 0, 0), -1)
 			cv2.circle(frame, (corners[1][0], corners[1][1]), 5, (0, 0, 255), -1)
@@ -223,7 +222,73 @@ def run(opt):
 		player_tracker.update(frame, player_bboxes, player_scores.flatten())
 		referee_tracker.update(frame, referee_bboxes, referee_scores.flatten())
   
-		# Display referee positions on digram using perspective transform matrix
+		if center:
+			# Remove players and referees from the frame
+			curr_frame = frame.copy()
+   
+			curr_frame = player_tracker.get_frame_wo_tracks(curr_frame)
+			curr_frame = referee_tracker.get_frame_wo_tracks(curr_frame)
+			prev_frame = player_tracker.get_frame_wo_tracks(prev_frame)
+			prev_frame = referee_tracker.get_frame_wo_tracks(prev_frame)
+	  
+			# Run optical flow between prev and current frame to calculate average camera movement
+			prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+			curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
+   
+			# Calculate optical flow
+			flow = cv2.calcOpticalFlowFarneback(prev_gray, curr_gray, None, 0.5, 3, 30, 3, 5, 1.2, 0)
+   
+			flow_frame = curr_frame.copy()
+   
+			# Loop through each pixel in the flow
+			for y in range(0, flow.shape[0], 10):
+				for x in range(0, flow.shape[1], 10):
+					# Get the flow vector
+					fx, fy = flow[y, x]
+   
+					# Draw the flow vector
+					cv2.line(flow_frame, (x, y), (int(x + fx), int(y + fy)), (0, 255, 0))
+	 
+			# Calculate the average x and y movement
+			avg_movement = np.mean(flow, axis=(0, 1))*2
+   
+			# Update corners with average movement
+			avg_movement = avg_movement.astype(int)
+			for i in range(len(corners)):
+				corners[i] += avg_movement
+	
+			# Plot the corners
+			corners = corners.astype(int)
+			cv2.circle(flow_frame, (corners[0][0], corners[0][1]), 5, (255, 0, 0), -1)
+			cv2.circle(flow_frame, (corners[1][0], corners[1][1]), 5, (0, 0, 255), -1)
+			cv2.circle(flow_frame, (corners[2][0], corners[2][1]), 5, (0, 255, 0), -1)
+			cv2.circle(flow_frame, (corners[3][0], corners[3][1]), 5, (0, 255, 255), -1)
+   
+			# Display the optical flow
+			cv2.imshow("Optical Flow", flow_frame)
+   
+			# Compare the top left and bottom left corners
+			if corners[0][0] > corners[2][0]:
+				state = "Left"
+				# Free Throw Coordinates of 4 corners in order (top left, top right, bottom left, bottom right)
+				# (53, 470) (424, 470) (53, 780) (424, 780)
+				diagram_corners = np.array([[53, 470], [424, 470], [53, 780], [424, 780]], dtype=np.float32)
+			else:
+				state = "Right"
+				# Free Throw Coordinates of 4 corners in order (top left, top right, bottom left, bottom right)
+				# (1521, 473) (1890, 473) (1521, 782) (1890, 782) 
+				diagram_corners = np.array([[1521, 473], [1890, 473], [1521, 782], [1890, 782]], dtype=np.float32)
+   
+			# Convert corners to float32
+			corners = corners.astype(np.float32)
+
+			# Get the perspective transform matrix
+			M = cv2.getPerspectiveTransform(corners, diagram_corners)
+   
+			center = False
+
+  
+		# Display referee positions on diagram using perspective transform matrix
 		if not center:
 			diagram = cv2.imread("diagram.jpg")
    
@@ -231,7 +296,7 @@ def run(opt):
 			diagram = applyTransformation(referee_tracker, M, diagram)
 			diagram = applyTransformation(player_tracker, M, diagram)
    
-			# Draw cornerrs on diagram in same colour as corner points
+			# Draw corners on diagram in same colour as corner points
 			diagram_corners = diagram_corners.astype(int)
 			cv2.circle(diagram, (diagram_corners[0][0], diagram_corners[0][1]), 15, (255, 0, 0), -1)
 			cv2.circle(diagram, (diagram_corners[1][0], diagram_corners[1][1]), 15, (0, 0, 255), -1)
@@ -284,6 +349,10 @@ def run(opt):
 			elif cv2.waitKey(1) & 0xFF == ord('r'):
 				paused = False
 				break
+
+		prev_frame = orig.copy()
+		# prev_frame = player_tracker.get_frame_wo_tracks(prev_frame)
+		# prev_frame = referee_tracker.get_frame_wo_tracks(prev_frame)
 					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start
