@@ -193,12 +193,6 @@ def run(opt):
 
 			# Display the binary image
 			cv2.imshow("Mask", binary)
-
-		# Keep track of the maximum mask area frame
-		if mask_area > max_mask_area:
-			max_mask_area = mask_area
-			max_mask_frame = frame
-			cv2.imwrite("./data/max_mask_frame.jpg", max_mask_frame)
   
 		# Convert frames to RGB
 		frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
