@@ -10,16 +10,9 @@ from tools.deepsort import DeepSortWrapper
 from tools.yolov7 import Yolov7Wrapper
 from tools.yolov7_seg import Yolov7SegWrapper
 
-# Free Throw Coordinates of 4 corners in order (top left, top right, bottom left, bottom right)
-# (53, 470) (424, 470) (53, 780) (424, 780)
-COORDS = np.array([[53, 470], [424, 470], [53, 780], [424, 780]], dtype=np.float32)
-
 def convertMaskToPolygon(binaryMask):
     # Find contours
 	contours, _ = cv2.findContours(binaryMask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
- 
-	if len(contours) == 0:
-		return None
 	
 	# Get the largest contour
 	largest_contour = max(contours, key=cv2.contourArea)
@@ -76,6 +69,26 @@ def getCornerPoints(polygon):
 	corners = np.array([top_left, top_right, bottom_left, bottom_right])
 	
 	return corners
+
+def applyTransformation(tracker, M, diagram):
+	# Get referee positions (track_id, x, y)
+	positions = tracker.get_positions()
+
+	if len(positions) == 0:
+		return diagram
+
+	xy = positions[:, 1:]
+
+	# Convert referee positions to diagram coordinates
+	diagram_positions = cv2.perspectiveTransform(xy.reshape(-1, 1, 2), M)
+
+	# Draw referee positions on diagram
+	for i, position in enumerate(diagram_positions):
+		colour = tracker.get_colour(int(positions[i, 0]))[::-1]
+		x, y = position[0].astype(int)
+		cv2.circle(diagram, (x, y), 15, colour, -1)
+  
+	return diagram
 		
 def run(opt):
 	# Get arguments
@@ -114,20 +127,11 @@ def run(opt):
  
 	# Get total number of frames
 	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
- 
-	# Display diagram.jpg and draw green dots on the 4 corners
-	diagram = cv2.imread("diagram.jpg")
-	for coord in COORDS:
-		x, y = int(coord[0]), int(coord[1])
-		cv2.circle(diagram, (x, y), 3, (0, 255, 0), -1)
-  
-	cv2.imshow("Diagram", diagram)
 
 	# Loop through all frames
 	for i in trange(total_frames, desc="YOLOv7 + DeepSORT + YOLACT"):
 		# Start timer for current frame
 		start = perf_counter()
-		state = "Center"
 
 		# Get next frame from video
 		ret, orig = video.read()
@@ -148,60 +152,53 @@ def run(opt):
 		# Calculate the percentage area of the detected mask (white pixels)
 		mask_area = np.sum(binary == 255) / (w * h)
    
-		# If the first and last 5% of the frame contains white pixels, then the frame is illegal
-		illegal_frame = binary[:, :w//20].any() or binary[:, -w//20:].any()
+		# If the first and last 2.5% of the frame contains white pixels, then the frame is a center frame
+		center = binary[:, :w//40].any() or binary[:, -w//40:].any() or mask_area < 0.01
   
-		# Draw 5% lines on the frame
-		if illegal_frame:
-			cv2.line(frame, (w//20, 0), (w//20, h), (0, 0, 255), 2)
-			cv2.line(frame, (w - w//20, 0), (w - w//20, h), (0, 0, 255), 2)
+		if center:
+			state = "Center"
 		else:
-			cv2.line(frame, (w//20, 0), (w//20, h), (0, 255, 0), 2)
-			cv2.line(frame, (w - w//20, 0), (w - w//20, h), (0, 255, 0), 2)
-  
-		if not illegal_frame:
+			# Convert the binary image to a polygon
 			polygon = convertMaskToPolygon(binary)
    
-			if polygon is not None:
-				corners = getCornerPoints(polygon)
+			# Extract the top left, top right, bottom left and bottom right corners of the polygon
+			corners = getCornerPoints(polygon)
     
-				# Compare the top left and bottom left corners
-				if corners[0][0] > corners[2][0]:
-					state = "Left"
-				else:
-					state = "Right"
+			# Compare the top left and bottom left corners
+			if corners[0][0] > corners[2][0]:
+				state = "Left"
+				# Free Throw Coordinates of 4 corners in order (top left, top right, bottom left, bottom right)
+				# (53, 470) (424, 470) (53, 780) (424, 780)
+				diagram_corners = np.array([[53, 470], [424, 470], [53, 780], [424, 780]], dtype=np.float32)
+			else:
+				state = "Right"
+				# Free Throw Coordinates of 4 corners in order (top left, top right, bottom left, bottom right)
+				# (1521, 473) (1890, 473) (1521, 782) (1890, 782) 
+				diagram_corners = np.array([[1521, 473], [1890, 473], [1521, 782], [1890, 782]], dtype=np.float32)
     
-				# Make the corners blue, red, green, yellow respectively
-				cv2.circle(frame, (corners[0][0], corners[0][1]), 5, (255, 0, 0), -1)
-				cv2.circle(frame, (corners[1][0], corners[1][1]), 5, (0, 0, 255), -1)
-				cv2.circle(frame, (corners[2][0], corners[2][1]), 5, (0, 255, 0), -1)
-				cv2.circle(frame, (corners[3][0], corners[3][1]), 5, (0, 255, 255), -1)
-				# Do the same for the diagram
-				cv2.circle(diagram, (int(COORDS[0][0]), int(COORDS[0][1])), 5, (255, 0, 0), -1)
-				cv2.circle(diagram, (int(COORDS[1][0]), int(COORDS[1][1])), 5, (0, 0, 255), -1)
-				cv2.circle(diagram, (int(COORDS[2][0]), int(COORDS[2][1])), 5, (0, 255, 0), -1)
-				cv2.circle(diagram, (int(COORDS[3][0]), int(COORDS[3][1])), 5, (0, 255, 255), -1)
-    
-				cv2.imshow("Diagram", diagram)
-    
-				# Convert corners to float32
-				corners = corners.astype(np.float32)
-    
-				# Get the perspective transform matrix
-				M = cv2.getPerspectiveTransform(corners, COORDS)
+			# Make the corners blue, red, green, yellow respectively
+			cv2.circle(frame, (corners[0][0], corners[0][1]), 5, (255, 0, 0), -1)
+			cv2.circle(frame, (corners[1][0], corners[1][1]), 5, (0, 0, 255), -1)
+			cv2.circle(frame, (corners[2][0], corners[2][1]), 5, (0, 255, 0), -1)
+			cv2.circle(frame, (corners[3][0], corners[3][1]), 5, (0, 255, 255), -1)
 
-				# Display the polygon
-				cv2.imshow("Polygon", polygon)
-    
-				# Display the binary image
-				cv2.imshow("Mask", binary)
-	
-			# Keep track of the maximum mask area frame
-			if mask_area > max_mask_area:
-				max_mask_area = mask_area
-				max_mask_frame = frame
-				cv2.imwrite("./data/max_mask_frame.jpg", max_mask_frame)
+			# Convert corners to float32
+			corners = corners.astype(np.float32)
 
+			# Get the perspective transform matrix
+			M = cv2.getPerspectiveTransform(corners, diagram_corners)
+
+			# Display the polygon
+			cv2.imshow("Polygon", polygon)
+
+			# Display the binary image
+			cv2.imshow("Mask", binary)
+
+		# Keep track of the maximum mask area frame
+		if mask_area > max_mask_area:
+			max_mask_area = mask_area
+			max_mask_frame = frame
+			cv2.imwrite("./data/max_mask_frame.jpg", max_mask_frame)
   
 		# Convert frames to RGB
 		frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -233,43 +230,23 @@ def run(opt):
 		referee_tracker.update(frame, referee_bboxes, referee_scores.flatten())
   
 		# Display referee positions on digram using perspective transform matrix
-		if not illegal_frame:
-			# Get referee positions (track_id, x, y)
-			referee_positions = referee_tracker.get_positions()
-   
-			if len(referee_positions) == 0:
-				continue
-
-			referee_xy = referee_positions[:, 1:]
-   
-			# Convert referee positions to diagram coordinates
-			diagram_positions = cv2.perspectiveTransform(referee_xy.reshape(-1, 1, 2), M)
-   
+		if not center:
 			diagram = cv2.imread("diagram.jpg")
-			# Draw referee positions on diagram
-			for i, position in enumerate(diagram_positions):
-				colour = referee_tracker.get_colour(int(referee_positions[i, 0]))[::-1]
-				x, y = position[0].astype(int)
-				cv2.circle(diagram, (x, y), 15, colour, -1)
-    
-		# Do the same for the players
-		if not illegal_frame:
-			player_positions = player_tracker.get_positions()
+   
+			# Add player and referee positions to diagram
+			diagram = applyTransformation(referee_tracker, M, diagram)
+			diagram = applyTransformation(player_tracker, M, diagram)
+   
+			# Draw cornerrs on diagram in same colour as corner points
+			diagram_corners = diagram_corners.astype(int)
+			cv2.circle(diagram, (diagram_corners[0][0], diagram_corners[0][1]), 15, (255, 0, 0), -1)
+			cv2.circle(diagram, (diagram_corners[1][0], diagram_corners[1][1]), 15, (0, 0, 255), -1)
+			cv2.circle(diagram, (diagram_corners[2][0], diagram_corners[2][1]), 15, (0, 255, 0), -1)
+			cv2.circle(diagram, (diagram_corners[3][0], diagram_corners[3][1]), 15, (0, 255, 255), -1)
 
-			if len(player_positions) == 0:
-				continue
-				
-			player_xy = player_positions[:, 1:]
-
-			diagram_positions = cv2.perspectiveTransform(player_xy.reshape(-1, 1, 2), M)
-
-			for i, position in enumerate(diagram_positions):
-				colour = player_tracker.get_colour(int(player_positions[i, 0]))[::-1]
-				x, y = position[0].astype(int)
-				cv2.circle(diagram, (x, y), 15, colour, -1)
-    
 			# Place a downsized version of the diagram in the top right corner of the frame
 			diagram = cv2.resize(diagram, (0, 0), fx=0.25, fy=0.25)
+   
 			# Change colour space to BGR
 			diagram = cv2.cvtColor(diagram, cv2.COLOR_RGB2BGR)
 			frame[:diagram.shape[0], -diagram.shape[1]:] = diagram
