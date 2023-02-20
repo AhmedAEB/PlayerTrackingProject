@@ -1,4 +1,5 @@
 import random
+import numpy as np
 
 from deepsort.deep_sort.detection import Detection
 from deepsort.tools.generate_detections import create_box_encoder
@@ -35,5 +36,21 @@ class DeepSortWrapper():
 			plot_one_box(xyxy, frame, label=label, color=self.colors[track.track_id], line_thickness=2)
    
 		return 
-   
+
+	def get_positions(self):
+		# Return a numpy array of tuples (track_id, x, y) where x and y is the center of the bottom of the bbox
+		positions = []
+		for track in self.tracker.tracks:
+			if not track.is_confirmed() or track.time_since_update > 1:
+				continue
+
+			xyxy = track.to_tlbr().astype(int)
+			
+			positions.append((track.track_id, int((xyxy[0] + xyxy[2]) / 2), int(xyxy[3])))
+
+		return np.array(positions, dtype=np.float32)
+
+	def get_colour(self, track_id):
+		return self.colors[track_id]
+
 # Path: tools/generate_detections.py

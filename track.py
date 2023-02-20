@@ -10,6 +10,73 @@ from tools.deepsort import DeepSortWrapper
 from tools.yolov7 import Yolov7Wrapper
 from tools.yolov7_seg import Yolov7SegWrapper
 
+# Free Throw Coordinates of 4 corners in order (top left, top right, bottom left, bottom right)
+# (53, 470) (424, 470) (53, 780) (424, 780)
+COORDS = np.array([[53, 470], [424, 470], [53, 780], [424, 780]], dtype=np.float32)
+
+def convertMaskToPolygon(binaryMask):
+    # Find contours
+	contours, _ = cv2.findContours(binaryMask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+ 
+	if len(contours) == 0:
+		return None
+	
+	# Get the largest contour
+	largest_contour = max(contours, key=cv2.contourArea)
+	
+	# Approximate the contour
+	epsilon = 0.01 * cv2.arcLength(largest_contour, True)
+ 
+	# Get the polygon
+	polygon = cv2.approxPolyDP(largest_contour, epsilon, True)
+ 
+	# Draw the polygon on a blank image
+	blank = np.zeros_like(binaryMask)
+	cv2.drawContours(blank, [polygon], 0, 255, -1)
+	
+	return blank
+
+def getCornerPoints(polygon):
+    # Run a line in each direction along the polygon and 
+    # record the coordinates of the first non-zero pixels
+	corners = []
+	for i in range(polygon.shape[0]):
+		# Check if the row contains any white pixels
+		if polygon[i, :].any():
+			corners.append((np.argmax(polygon[i, :]), i))
+			break
+
+	for i in range(polygon.shape[0]-1, -1, -1):
+		# Check if the row contains any white pixels
+		if polygon[i, :].any():
+			corners.append((np.argmax(polygon[i, :]), i))
+			break
+
+	for i in range(polygon.shape[1]):
+		# Check if the column contains any white pixels
+		if polygon[:, i].any():
+			corners.append((i, np.argmax(polygon[:, i])))
+			break
+
+	for i in range(polygon.shape[1]-1, -1, -1):
+		# Check if the column contains any white pixels
+		if polygon[:, i].any():
+			corners.append((i, np.argmax(polygon[:, i])))
+			break
+
+	# Convert to numpy array
+	corners = np.array(corners)
+ 
+	# Put the corners in the correct order (top left, top right, bottom left, bottom right)
+	corners = corners.reshape(-1, 2)
+	top = corners[np.argsort(corners[:, 1])[:2]]
+	bottom = corners[np.argsort(corners[:, 1])[2:]]
+	top_left, top_right = top[np.argsort(top[:, 0])[:2]]
+	bottom_left, bottom_right = bottom[np.argsort(bottom[:, 0])[:2]]
+	corners = np.array([top_left, top_right, bottom_left, bottom_right])
+	
+	return corners
+		
 def run(opt):
 	# Get arguments
 	source, save_path, yolo_weights, yolo_seg_weights, deepsort_weights, device = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.yolo_seg_weights, opt.deepsort_weights, opt.device
@@ -47,14 +114,25 @@ def run(opt):
  
 	# Get total number of frames
 	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+ 
+	# Display diagram.jpg and draw green dots on the 4 corners
+	diagram = cv2.imread("diagram.jpg")
+	for coord in COORDS:
+		x, y = int(coord[0]), int(coord[1])
+		cv2.circle(diagram, (x, y), 3, (0, 255, 0), -1)
+  
+	cv2.imshow("Diagram", diagram)
 
 	# Loop through all frames
 	for i in trange(total_frames, desc="YOLOv7 + DeepSORT + YOLACT"):
 		# Start timer for current frame
 		start = perf_counter()
+		state = "Center"
 
 		# Get next frame from video
-		ret, frame = video.read()
+		ret, orig = video.read()
+  
+		frame = orig.copy()
 
 		# Check if video has ended
 		if not ret:
@@ -69,49 +147,68 @@ def run(opt):
   
 		# Calculate the percentage area of the detected mask (white pixels)
 		mask_area = np.sum(binary == 255) / (w * h)
-  
-		# Display a line 10% of the way from the left and right of the frame
-		cv2.line(frame, (w//20, 0), (w//20, h), (0, 255, 0), 2)
-		cv2.line(frame, (w - w//20, 0), (w - w//20, h), (0, 255, 0), 2)
-  
-		# Find contours
-		cnts = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-		cnts = cnts[0] if len(cnts) == 2 else cnts[1]
-		# Approximate the contours
-		if len(cnts) > 0:
-			epsilon = 0.01 * cv2.arcLength(cnts[-1], True)
-			approx = cv2.approxPolyDP(cnts[-1], epsilon, True)
-			# Draw the contours
-			cv2.drawContours(frame, [approx], -1, (0, 0, 255), 2)
-			# Draw polygon on a blank binary image
-			blank = np.zeros_like(binary)
-			cv2.drawContours(blank, [approx], -1, (255, 255, 255), -1)
-
-			# Corner detection using good features to track
-			corners = cv2.goodFeaturesToTrack(blank, 4, 0.01, 10)
-			corners = np.int0(corners)
-			for corner in corners:
-				x, y = corner.ravel()
-				cv2.circle(frame, (x, y), 5, (0, 255, 0), -1)
-
-			# Display the polygon
-			cv2.imshow("Polygon", blank)
    
-		# Keep track of the maximum mask area frame if the first and last 5% lines do not contain any white pixels
-		if mask_area > max_mask_area and (binary[:, w//20] == 0).all() and (binary[:, w - w//20] == 0).all():
-			max_mask_area = mask_area
-			max_mask_frame = frame
-			cv2.imwrite("./data/max_mask_frame.jpg", max_mask_frame)
+		# If the first and last 5% of the frame contains white pixels, then the frame is illegal
+		illegal_frame = binary[:, :w//20].any() or binary[:, -w//20:].any()
   
-		# Display the binary image
-		cv2.imshow("Mask", binary)
+		# Draw 5% lines on the frame
+		if illegal_frame:
+			cv2.line(frame, (w//20, 0), (w//20, h), (0, 0, 255), 2)
+			cv2.line(frame, (w - w//20, 0), (w - w//20, h), (0, 0, 255), 2)
+		else:
+			cv2.line(frame, (w//20, 0), (w//20, h), (0, 255, 0), 2)
+			cv2.line(frame, (w - w//20, 0), (w - w//20, h), (0, 255, 0), 2)
+  
+		if not illegal_frame:
+			polygon = convertMaskToPolygon(binary)
+   
+			if polygon is not None:
+				corners = getCornerPoints(polygon)
+    
+				# Compare the top left and bottom left corners
+				if corners[0][0] > corners[2][0]:
+					state = "Left"
+				else:
+					state = "Right"
+    
+				# Make the corners blue, red, green, yellow respectively
+				cv2.circle(frame, (corners[0][0], corners[0][1]), 5, (255, 0, 0), -1)
+				cv2.circle(frame, (corners[1][0], corners[1][1]), 5, (0, 0, 255), -1)
+				cv2.circle(frame, (corners[2][0], corners[2][1]), 5, (0, 255, 0), -1)
+				cv2.circle(frame, (corners[3][0], corners[3][1]), 5, (0, 255, 255), -1)
+				# Do the same for the diagram
+				cv2.circle(diagram, (int(COORDS[0][0]), int(COORDS[0][1])), 5, (255, 0, 0), -1)
+				cv2.circle(diagram, (int(COORDS[1][0]), int(COORDS[1][1])), 5, (0, 0, 255), -1)
+				cv2.circle(diagram, (int(COORDS[2][0]), int(COORDS[2][1])), 5, (0, 255, 0), -1)
+				cv2.circle(diagram, (int(COORDS[3][0]), int(COORDS[3][1])), 5, (0, 255, 255), -1)
+    
+				cv2.imshow("Diagram", diagram)
+    
+				# Convert corners to float32
+				corners = corners.astype(np.float32)
+    
+				# Get the perspective transform matrix
+				M = cv2.getPerspectiveTransform(corners, COORDS)
+
+				# Display the polygon
+				cv2.imshow("Polygon", polygon)
+    
+				# Display the binary image
+				cv2.imshow("Mask", binary)
+	
+			# Keep track of the maximum mask area frame
+			if mask_area > max_mask_area:
+				max_mask_area = mask_area
+				max_mask_frame = frame
+				cv2.imwrite("./data/max_mask_frame.jpg", max_mask_frame)
+
   
 		# Convert frames to RGB
 		frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 		masked_frame = cv2.cvtColor(masked_frame, cv2.COLOR_BGR2RGB)
   
 		# Use YOLO to detect players and referees
-		detections = yolov7.detect(frame, draw_bboxes=False)
+		detections = yolov7.detect(orig, draw_bboxes=False)
 		
 		if detections is None:
 			bboxes, scores, classes = [], [], []
@@ -134,9 +231,51 @@ def run(opt):
 		# Track the players and referee separately using DeepSORT
 		player_tracker.update(frame, player_bboxes, player_scores.flatten())
 		referee_tracker.update(frame, referee_bboxes, referee_scores.flatten())
+  
+		# Display referee positions on digram using perspective transform matrix
+		if not illegal_frame:
+			# Get referee positions (track_id, x, y)
+			referee_positions = referee_tracker.get_positions()
+   
+			if len(referee_positions) == 0:
+				continue
+
+			referee_xy = referee_positions[:, 1:]
+   
+			# Convert referee positions to diagram coordinates
+			diagram_positions = cv2.perspectiveTransform(referee_xy.reshape(-1, 1, 2), M)
+   
+			diagram = cv2.imread("diagram.jpg")
+			# Draw referee positions on diagram
+			for i, position in enumerate(diagram_positions):
+				colour = referee_tracker.get_colour(int(referee_positions[i, 0]))[::-1]
+				x, y = position[0].astype(int)
+				cv2.circle(diagram, (x, y), 15, colour, -1)
+    
+		# Do the same for the players
+		if not illegal_frame:
+			player_positions = player_tracker.get_positions()
+
+			if len(player_positions) == 0:
+				continue
+				
+			player_xy = player_positions[:, 1:]
+
+			diagram_positions = cv2.perspectiveTransform(player_xy.reshape(-1, 1, 2), M)
+
+			for i, position in enumerate(diagram_positions):
+				colour = player_tracker.get_colour(int(player_positions[i, 0]))[::-1]
+				x, y = position[0].astype(int)
+				cv2.circle(diagram, (x, y), 15, colour, -1)
+    
+			# Place a downsized version of the diagram in the top right corner of the frame
+			diagram = cv2.resize(diagram, (0, 0), fx=0.25, fy=0.25)
+			# Change colour space to BGR
+			diagram = cv2.cvtColor(diagram, cv2.COLOR_RGB2BGR)
+			frame[:diagram.shape[0], -diagram.shape[1]:] = diagram
 		
 		# Draw white square in top left corner for text
-		cv2.rectangle(frame, (0, 0), (185, 130), (255, 255, 255), -1)
+		cv2.rectangle(frame, (0, 0), (185, 160), (255, 255, 255), -1)
 		
 		# Add fps to display frame
 		cv2.putText(frame, f"FPS: {1/(perf_counter()-start):.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
@@ -144,10 +283,13 @@ def run(opt):
 		# Add number of objects to display frame, split into players and referees
 		cv2.putText(frame, f"Players: {len(player_tracker.tracker.tracks)}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 		cv2.putText(frame, f"Referees: {len(referee_tracker.tracker.tracks)}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-  
+
 		# Add mask area to display frame
 		cv2.putText(frame, f"Mask: {mask_area*100:.2f}%", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 		
+		# Add frame state to display frame
+		cv2.putText(frame, f"State: {state}", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+  
 		# Write to output video
 		frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 		output.write(frame)
