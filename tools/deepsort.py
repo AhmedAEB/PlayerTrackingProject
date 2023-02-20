@@ -53,4 +53,16 @@ class DeepSortWrapper():
 	def get_colour(self, track_id):
 		return self.colors[track_id]
 
+	def get_frame_wo_tracks(self, frame):
+		for track in self.tracker.tracks:
+			if not track.is_confirmed() or track.time_since_update > 1:
+				continue
+			
+			x1, y1, x2, y2 = track.to_tlbr().astype(int)
+   
+			# Draw a solid black rectangle over the bbox
+			frame[y1:y2, x1:x2] = 0
+
+		return frame
+
 # Path: tools/generate_detections.py
