@@ -209,48 +209,76 @@ def run(opt):
 			# Convert bboxes to xyxy format for DeepSORT #TODO: Double check deepsort format
 			bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
 			
-		# Get indices of the players (0) and referees (1)
-		classes = classes.flatten().astype(int)
-		player_indices = np.where(classes == 0)[0]
-		referee_indices = np.where(classes == 1)[0]
-		
-		# Get the bboxes and scores of the players and referee
-		player_bboxes, player_scores = bboxes[player_indices], scores[player_indices]
-		referee_bboxes, referee_scores = bboxes[referee_indices], scores[referee_indices]
-		
-		# Track the players and referee separately using DeepSORT
-		player_tracker.update(frame, player_bboxes, player_scores.flatten())
-		referee_tracker.update(frame, referee_bboxes, referee_scores.flatten())
+			classes = classes.flatten().astype(int)
+			player_indices = np.where(classes == 0)[0]
+			referee_indices = np.where(classes == 1)[0]
+			
+			# Get the bboxes and scores of the players and referee
+			player_bboxes, player_scores = bboxes[player_indices], scores[player_indices]
+			referee_bboxes, referee_scores = bboxes[referee_indices], scores[referee_indices]
+			
+			# Track the players and referee separately using DeepSORT
+			player_tracker.update(frame, player_bboxes, player_scores.flatten())
+			referee_tracker.update(frame, referee_bboxes, referee_scores.flatten())
   
 		if center:
 			# Remove players and referees from the frame
 			curr_frame = frame.copy()
    
-			curr_frame = player_tracker.get_frame_wo_tracks(curr_frame)
-			curr_frame = referee_tracker.get_frame_wo_tracks(curr_frame)
-			prev_frame = player_tracker.get_frame_wo_tracks(prev_frame)
-			prev_frame = referee_tracker.get_frame_wo_tracks(prev_frame)
+			# curr_frame = player_tracker.get_frame_wo_tracks(curr_frame)
+			# curr_frame = referee_tracker.get_frame_wo_tracks(curr_frame)
+			# prev_frame = player_tracker.get_frame_wo_tracks(prev_frame)
+			# prev_frame = referee_tracker.get_frame_wo_tracks(prev_frame)
+   
+			# Apply canny edge detection to the prev_frame and curr_frame
+			prev_frame = cv2.Canny(prev_frame, 100, 200)
+			curr_frame = cv2.Canny(curr_frame, 100, 200)
+   
+			miny_p, maxy_p = player_tracker.get_min_max()
+			miny_r, maxy_r = referee_tracker.get_min_max()
+			miny, maxy = min(miny_p, miny_r), max(maxy_p, maxy_r)
+			# Add 3% to the miny and maxy
+			miny, maxy = int(miny * 0.97), int(maxy * 1.03)
 	  
 			# Run optical flow between prev and current frame to calculate average camera movement
-			prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
-			curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
+			# prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+			# curr_frame = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
    
 			# Calculate optical flow
-			flow = cv2.calcOpticalFlowFarneback(prev_gray, curr_gray, None, 0.5, 3, 30, 3, 5, 1.2, 0)
+			flow = cv2.calcOpticalFlowFarneback(prev_frame, curr_frame, None, 0.5, 3, 30, 3, 5, 1.2, 0)
    
-			flow_frame = curr_frame.copy()
+			# Reset flow vectors in range miny to maxy
+			flow[miny:maxy, :, :] = 0
+			# Reset top & bottom 20% of flow vectors
+			flow[:int(flow.shape[0] * 0.2), :, :] = 0
+			flow[int(flow.shape[0] * 0.8):, :, :] = 0
    
+			flow_frame = frame.copy()
+			# Convert colorspace to BGR for drawing
+			flow_frame = cv2.cvtColor(flow_frame, cv2.COLOR_RGB2BGR)
+   
+			# Calculate the average x and y movement ignoring vectors with magnitude less than 1
+			avg_movement = np.array([0, 0], dtype=np.float32)
+			count = 0
 			# Loop through each pixel in the flow
 			for y in range(0, flow.shape[0], 10):
 				for x in range(0, flow.shape[1], 10):
 					# Get the flow vector
 					fx, fy = flow[y, x]
+     
+					# If the magnitude of the flow vector is greater than 1, add it to the average movement
+					if np.sqrt(fx ** 2 + fy ** 2) > 1.5:
+						avg_movement += np.array([fx, fy], dtype=np.float32)
+						count += 1
    
-					# Draw the flow vector
-					cv2.line(flow_frame, (x, y), (int(x + fx), int(y + fy)), (0, 255, 0))
-	 
-			# Calculate the average x and y movement
-			avg_movement = np.mean(flow, axis=(0, 1))*2
+					# Draw the flow vector in red if moving right, blue if moving left
+					if fx > 0:
+						cv2.line(flow_frame, (x, y), (x + int(fx), y + int(fy)), (0, 0, 255), 1)
+					else:
+						cv2.line(flow_frame, (x, y), (x + int(fx), y + int(fy)), (255, 0, 0), 1)
+      
+			# Divide the average movement by the number of vectors to get the average movement
+			avg_movement /= count
    
 			# Update corners with average movement
 			avg_movement = avg_movement.astype(int)
@@ -269,12 +297,10 @@ def run(opt):
    
 			# Compare the top left and bottom left corners
 			if corners[0][0] > corners[2][0]:
-				state = "Left"
 				# Free Throw Coordinates of 4 corners in order (top left, top right, bottom left, bottom right)
 				# (53, 470) (424, 470) (53, 780) (424, 780)
 				diagram_corners = np.array([[53, 470], [424, 470], [53, 780], [424, 780]], dtype=np.float32)
 			else:
-				state = "Right"
 				# Free Throw Coordinates of 4 corners in order (top left, top right, bottom left, bottom right)
 				# (1521, 473) (1890, 473) (1521, 782) (1890, 782) 
 				diagram_corners = np.array([[1521, 473], [1890, 473], [1521, 782], [1890, 782]], dtype=np.float32)
