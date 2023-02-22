@@ -30,7 +30,6 @@ class Yolov7Wrapper():
 
 		if self.device.type != "cpu":  # Run once before inference
 			self.model(torch.zeros(1, 3, self.imgsz, self.imgsz).to(self.device).type_as(next(self.model.parameters())))
-			
 
 	@torch.no_grad()
 	def detect(self, img, draw_bboxes = True):
