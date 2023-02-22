@@ -20,6 +20,8 @@ class Frame():
 		self.mask = None
 		self.polygon = None
 		self.flow_frame = None
+
+		self.positions = [] # [colour, x, y]
   
 	def detectAndTrack(self, yoloWrapper: Yolov7Wrapper, trackers: [DeepSortWrapper]):
 		# Use YOLO to detect players and referees
@@ -48,6 +50,12 @@ class Frame():
 				if i == 0: # Players
 					# Run a RGB histogram on the players
 					self.getRGBHistogram(class_bboxes)
+     
+				positions = tracker.get_positions_c()
+    
+				if positions is not None:
+					# Append the positions to the list of positions
+					self.positions.append(positions)
     
 	def detectMask(self, yoloWrapper: Yolov7SegWrapper):
 		# Use yolo to detect the free throw area

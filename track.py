@@ -83,7 +83,8 @@ def run(opt):
 			frame.updateCorners(miny, maxy, [player_tracker, referee_tracker])
   
 		# Apply perspective transform to player and referee positions
-		frame.updateDiagram([player_tracker, referee_tracker])
+		# frame.updateDiagram([player_tracker, referee_tracker])
+		print(frame.positions)
 
 		# Place a downsized version of the diagram in the top right corner of the frame
 		small_diagram = cv2.resize(frame.diagram, (0, 0), fx=0.25, fy=0.25)
