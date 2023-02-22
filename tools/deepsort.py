@@ -53,15 +53,17 @@ class DeepSortWrapper():
 	def get_positions_c(self):
 		# Return a numpy array of tuples (track_id, x, y) where x and y is the center of the bottom of the bbox
 		positions = []
+		colours = []
 		for track in self.tracker.tracks:
 			if not track.is_confirmed() or track.time_since_update > 1:
 				continue
 
 			xyxy = track.to_tlbr().astype(int)
 			
-			positions.append((self.colors[track.track_id], int((xyxy[0] + xyxy[2]) / 2), int(xyxy[3])))
+			positions.append((int((xyxy[0] + xyxy[2]) / 2), int(xyxy[3])))
+			colours.append(self.colors[track.track_id])
 
-		return np.array(positions, dtype=np.float32)
+		return colours, positions
 
 	def get_colour(self, track_id):
 		return self.colors[track_id]

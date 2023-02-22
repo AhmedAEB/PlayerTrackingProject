@@ -13,7 +13,7 @@ from tools.frame import Frame
 
 def run(opt):
 	# Get arguments
-	source, save_path, yolo_weights, yolo_seg_weights, deepsort_weights, device = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.yolo_seg_weights, opt.deepsort_weights, opt.device
+	source, save_path, yolo_weights, yolo_seg_weights, deepsort_weights, device, show_process = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.yolo_seg_weights, opt.deepsort_weights, opt.device, opt.show_process
 	
 	# Get hyperparameters
 	max_cos_dist, nn_budget, iou_th, conf_th, iou_th_seg, conf_th_seg, max_track_age, init_phase_frames = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.iou_th_seg, opt.conf_th_seg, opt.max_track_age, opt.init_phase_frames
@@ -48,7 +48,13 @@ def run(opt):
 	# Get total number of frames
 	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
  
-	frame = None
+	# Get first frame from video
+	_, first = video.read()
+
+	frame = Frame(first, None, w, h)
+ 
+	# Convert frame to RGB
+	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
 
 	# Loop through all frames
 	for i in trange(total_frames, desc="YOLOv7 + DeepSORT + YOLACT"):
@@ -58,12 +64,12 @@ def run(opt):
 		# Get next frame from video
 		ret, orig = video.read()
   
-		frame = Frame(orig, frame)
-
 		# Check if video has ended
 		if not ret:
 			break
 
+		frame = Frame(orig, frame, w, h)
+    
 		# Convert frame to RGB
 		frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
   
@@ -81,58 +87,51 @@ def run(opt):
 			miny, maxy = int(miny * 0.97), int(maxy * 1.03)
 			
 			frame.updateCorners(miny, maxy, [player_tracker, referee_tracker])
-  
-		# Apply perspective transform to player and referee positions
-		# frame.updateDiagram([player_tracker, referee_tracker])
-		print(frame.positions)
-
-		# Place a downsized version of the diagram in the top right corner of the frame
-		small_diagram = cv2.resize(frame.diagram, (0, 0), fx=0.25, fy=0.25)
-  
-		# Display the diagram in the top right corner of the frame
-		frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
 		
 		# Draw white square in top left corner for text
-		cv2.rectangle(frame.img, (0, 0), (185, 100), (255, 255, 255), -1)
-		
-		# Add fps to display frame
-		cv2.putText(frame.img, f"FPS: {1/(perf_counter()-start):.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+		cv2.rectangle(frame.img, (0, 0), (185, 70), (255, 255, 255), -1)
 		
 		# Add number of objects to display frame, split into players and referees
-		cv2.putText(frame.img, f"Players: {len(player_tracker.tracker.tracks)}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-		cv2.putText(frame.img, f"Referees: {len(referee_tracker.tracker.tracks)}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-  
-		# Write to output video
-		frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
-		output.write(frame.img)
+		cv2.putText(frame.img, f"Players: {len(player_tracker.tracker.tracks)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+		cv2.putText(frame.img, f"Referees: {len(referee_tracker.tracker.tracks)}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 		
 		# Display frame and debug frames
-		frame.displayAll(debug = True)
+		if show_process:
+			frame.displayAll(debug = True)
   
-		# Check if q is pressed to stop tracking
-		if cv2.waitKey(1) & 0xFF == ord('q'):
-			break
-		# Check if p is pressed to pause tracking
-		elif cv2.waitKey(1) & 0xFF == ord('p'):
-			paused = True
-   
-		# Handle pause state
-		while paused:
-			# Check if n is pressed to step to next frame
-			if cv2.waitKey(1) & 0xFF == ord('n'):
-				break
-			# Check if r is pressed to resume tracking
-			elif cv2.waitKey(1) & 0xFF == ord('r'):
-				paused = False
-				break
-
-		prev_frame = orig.copy()
-		# prev_frame = player_tracker.get_frame_wo_tracks(prev_frame)
-		# prev_frame = referee_tracker.get_frame_wo_tracks(prev_frame)
+		# Save the next frame for the next iteration
+		frame.prev_frame.next_frame = frame
 					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start
 		i += 1
+  
+	# Loop back through frames to add the player and referee positions to the diagram
+	while frame.prev_frame is not None:
+		# Update the diagram with the player and referee positions
+		frame.updateDiagram()
+		frame = frame.prev_frame
+	
+	# Write the final diagram to the output video
+	while frame.next_frame is not None:
+		# Place a downsized version of the diagram in the top right corner of the frame
+		small_diagram = cv2.resize(frame.diagram, (0, 0), fx=0.25, fy=0.25)
+	
+		# Display the diagram in the top right corner of the frame
+		frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
+  
+		# Convert frame to BGR for writing to video
+		frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
+	 
+		# Write the frame to the output video
+		output.write(frame.img)
+		cv2.imshow("Video", frame.img)
+  
+		# Update the frame
+		frame = frame.next_frame
+  
+		# Display the video at the correct fps
+		cv2.waitKey(int(1000/fps))
 
 	print(f"\nFPS: {i/total_time:.2f} Hz")
 	cv2.destroyAllWindows()
@@ -146,6 +145,7 @@ if __name__ == "__main__":
 	parser.add_argument("--yolo_seg_weights", type=str, default="./weights/best.pt", help="Path to the YOLO segmentation weights file (.pt)")
 	parser.add_argument("--deepsort_weights", type=str, default="./weights/market1501.pb", help="Path to the DeepSORT weights file (.pb)")
 	parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+	parser.add_argument("--show_process", action="store_true", help="Show the intermediate frames")
  
 	# Hyperparameters #TODO: Review the help strings
 	parser.add_argument("--max_cos_dist", type=float, default=0.4, help="Maximum cosine distance for a track to be considered a match")

@@ -10,18 +10,20 @@ from matplotlib import pyplot as plt
 COLORS = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0), (255, 0, 255), (0, 255, 255), (255, 255, 255), (0, 0, 0)]
 
 class Frame():
-	def __init__(self, img, prev_frame=None):
+	def __init__(self, img, prev_frame, w, h):
 		self.img = img
 		self.diagram = cv2.imread("diagram.jpg")
-		self.w, self.h = img.shape[1], img.shape[0]
+		self.w, self.h = w, h
 		self.prev_frame = prev_frame
+		self.next_frame = None
   
 		self.corners = None
 		self.mask = None
 		self.polygon = None
 		self.flow_frame = None
 
-		self.positions = [] # [colour, x, y]
+		self.positions = [] # x, y
+		self.colours = [] # r, g, b
   
 	def detectAndTrack(self, yoloWrapper: Yolov7Wrapper, trackers: [DeepSortWrapper]):
 		# Use YOLO to detect players and referees
@@ -51,11 +53,12 @@ class Frame():
 					# Run a RGB histogram on the players
 					self.getRGBHistogram(class_bboxes)
      
-				positions = tracker.get_positions_c()
+				colours, positions = tracker.get_positions_c()
     
-				if positions is not None:
+				if len(positions) > 0:
 					# Append the positions to the list of positions
-					self.positions.append(positions)
+					self.positions.extend(positions)
+					self.colours.extend(colours)
     
 	def detectMask(self, yoloWrapper: Yolov7SegWrapper):
 		# Use yolo to detect the free throw area
@@ -150,28 +153,17 @@ class Frame():
 		for i, corner in enumerate(self.corners):
 			cv2.circle(self.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
 
-	def updateDiagram(self, trackers):
+	def updateDiagram(self):
 		# Get the transformation matrix
 		M = cv2.getPerspectiveTransform(self.corners, self.diagram_corners)
-	
-		# Loop through each tracker and draw the positions on the diagram
-		for tracker in trackers:
-			# Get referee positions (track_id, x, y)
-			positions = tracker.get_positions()
-
-			if len(positions) == 0:
-				continue
-
-			xy = positions[:, 1:]
-
-			# Convert referee positions to diagram coordinates
-			diagram_positions = cv2.perspectiveTransform(xy.reshape(-1, 1, 2), M)
-
-			# Draw referee positions on diagram
-			for i, position in enumerate(diagram_positions):
-				colour = tracker.get_colour(int(positions[i, 0]))
-				x, y = position[0].astype(int)
-				cv2.circle(self.diagram, (x, y), 15, colour, -1)
+  
+		if len(self.positions) > 0:
+			# Use self.positions and self.colours to draw the positions on the diagram
+			positions = np.array(self.positions)[np.newaxis].astype(np.float32)
+			positions = cv2.perspectiveTransform(positions, M)
+			for i, position in enumerate(positions[0]):
+				x, y = position.astype(int)
+				cv2.circle(self.diagram, (x, y), 15, self.colours[i], -1)
     
 		# Display corners on diagram
 		for i, corner in enumerate(self.diagram_corners):
@@ -270,13 +262,9 @@ class Frame():
 		return hist
   
 	def displayAll(self, debug=False):
-		# Display the frame
-		cv2.imshow("Frame", self.img)
-  
-		# If debug is false, return without displaying any other windows
 		if not debug:
 			return
-  
+     
 		# Display the optical flow frame
 		if self.flow_frame is not None:
 			cv2.imshow("Optical Flow", self.flow_frame)
@@ -288,3 +276,10 @@ class Frame():
 		# Display the polygon
 		if self.polygon is not None:
 			cv2.imshow("Polygon", self.polygon)
+   
+		# Display the frame in BGR
+		img = cv2.cvtColor(self.img, cv2.COLOR_RGB2BGR)
+		cv2.imshow("Frame", img)
+  
+		if cv2.waitKey(1):
+			return
