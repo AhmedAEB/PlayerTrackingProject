@@ -18,6 +18,7 @@ class Frame():
 		self.next_frame = None
   
 		self.corners = None
+		self.diagram_corners = None
 		self.corners_age = 0
 		self.mask = None
 		self.polygon = None
@@ -155,6 +156,10 @@ class Frame():
 			cv2.circle(self.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
 
 	def updateDiagram(self):
+		# if corners or diagram corners are not set, return
+		if self.corners is None or self.diagram_corners is None:
+			return
+     
 		# Get the transformation matrix
 		M = cv2.getPerspectiveTransform(self.corners, self.diagram_corners)
   
@@ -171,10 +176,14 @@ class Frame():
 			cv2.circle(self.diagram, tuple(corner.astype(int)), 10, COLORS[i], -1)
 		
 	def updateCorners(self, miny=0, maxy=0, trackers=[]):
+		if self.prev_frame is None or self.prev_frame.corners is None:
+			self.corners_age = 1e+5
+			return
+     
 		updateCorners(Frame1=self, Frame2=self.prev_frame, miny=miny, maxy=maxy, trackers=trackers)
   
 	def updateCornersBackwards(self, miny=0, maxy=0, trackers=[]):
-		if self.next_frame is None or self.corners_age <= self.next_frame.corners_age:
+		if self.next_frame is None or self.corners_age < self.next_frame.corners_age:
 			return
      
 		updateCorners(Frame1=self, Frame2=self.next_frame, miny=miny, maxy=maxy, trackers=trackers)
@@ -244,7 +253,7 @@ def updateCorners(Frame1: Frame, Frame2: Frame, miny=0, maxy=0, trackers=[]):
 	flow = cv2.calcOpticalFlowFarneback(frame2_img, frame1_img, None, 0.5, 10, 30, 3, 5, 1.5, 0)
  
 	# Create a flow frame to display the flow vectors
-	Frame1.flow_frame = np.zeros((flow.shape[0], flow.shape[1], 3), dtype=np.uint8)
+	Frame1.flow_frame = Frame1.img.copy()
  
 	# Reset flow vectors in range miny to maxy
 	flow[miny:maxy, :, :] = 0
