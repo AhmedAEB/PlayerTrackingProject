@@ -89,7 +89,7 @@ def run(opt):
 			frame.updateCorners(miny, maxy, [player_tracker, referee_tracker])
 		
 		# Draw white square in top left corner for text
-		cv2.rectangle(frame.img, (0, 0), (185, 70), (255, 255, 255), -1)
+		cv2.rectangle(frame.img, (0, 0), (185, 100), (255, 255, 255), -1)
 		
 		# Add number of objects to display frame, split into players and referees
 		cv2.putText(frame.img, f"Players: {len(player_tracker.tracker.tracks)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
@@ -101,6 +101,9 @@ def run(opt):
   
 		# Save the next frame for the next iteration
 		frame.prev_frame.next_frame = frame
+  
+		if i == 100: # ONLY FOR TESTING
+			break
 					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start
@@ -109,6 +112,7 @@ def run(opt):
 	# Loop back through frames to add the player and referee positions to the diagram
 	while frame.prev_frame is not None:
 		# Update the diagram with the player and referee positions
+		frame.updateCornersBackwards()
 		frame.updateDiagram()
 		frame = frame.prev_frame
 	
@@ -122,6 +126,9 @@ def run(opt):
   
 		# Convert frame to BGR for writing to video
 		frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
+  
+		# Add corner age to display frame
+		cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 	 
 		# Write the frame to the output video
 		output.write(frame.img)

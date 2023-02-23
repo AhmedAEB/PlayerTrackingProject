@@ -18,6 +18,7 @@ class Frame():
 		self.next_frame = None
   
 		self.corners = None
+		self.corners_age = 0
 		self.mask = None
 		self.polygon = None
 		self.flow_frame = None
@@ -170,70 +171,13 @@ class Frame():
 			cv2.circle(self.diagram, tuple(corner.astype(int)), 10, COLORS[i], -1)
 		
 	def updateCorners(self, miny=0, maxy=0, trackers=[]):
-		curr_frame = self.img.copy()
-		prev_frame = self.prev_frame.img.copy()
+		updateCorners(Frame1=self, Frame2=self.prev_frame, miny=miny, maxy=maxy, trackers=trackers)
+  
+	def updateCornersBackwards(self, miny=0, maxy=0, trackers=[]):
+		if self.next_frame is None or self.corners_age <= self.next_frame.corners_age:
+			return
      
-		# for tracker in trackers:
-		# 	curr_frame = tracker.get_frame_wo_tracks(curr_frame)
-		# 	prev_frame = tracker.get_frame_wo_tracks(prev_frame)
-     
-		# Create frame to draw flow vectors on
-		self.flow_frame = curr_frame.copy()
-  
-		# Apply canny edge detection to the curr and prev frames
-		curr_frame = cv2.Canny(curr_frame, 100, 200)
-		prev_frame = cv2.Canny(prev_frame, 100, 200)
-  
-		# Calculate optical flow
-		flow = cv2.calcOpticalFlowFarneback(prev_frame, curr_frame, None, 0.5, 10, 30, 3, 5, 1.5, 0)
-
-		# Reset flow vectors in range miny to maxy
-		flow[miny:maxy, :, :] = 0
-  
-		# Reset top & bottom 15% of flow vectors
-		flow[:int(flow.shape[0] * 0.15), :, :] = 0
-		flow[int(flow.shape[0] * 0.85):, :, :] = 0
-
-		# Calculate the average x and y movement ignoring vectors with magnitude less than 1
-		avg_movement = np.array([0, 0], dtype=np.float32)
-		count = 0
-  
-		# Loop through each pixel in the flow
-		for y in range(0, flow.shape[0], 10):
-			for x in range(0, flow.shape[1], 10):
-				# Get the flow vector
-				fx, fy = flow[y, x]
-	
-				# If the magnitude of the flow vector is greater than 1, add it to the average movement
-				if np.sqrt(fx ** 2 + fy ** 2) > 1.5:
-					avg_movement += np.array([fx, fy], dtype=np.float32)
-					count += 1
-
-				# Draw the flow vector in red if moving right, blue if moving left
-				if fx > 0:
-					cv2.line(self.flow_frame, (x, y), (x + int(fx), y + int(fy)), (0, 0, 255), 1)
-				else:
-					cv2.line(self.flow_frame, (x, y), (x + int(fx), y + int(fy)), (255, 0, 0), 1)
-	
-		# Divide the average movement by the number of vectors to get the average movement
-		avg_movement /= count
-
-		# Take a copy of the previous frame's corners
-		self.corners = self.prev_frame.corners.copy()
-		self.diagram_corners = self.prev_frame.diagram_corners.copy()
-
-		# Update corners with average movement
-		avg_movement = avg_movement.astype(int)
-		for i in range(len(self.corners)):
-			self.corners[i] += avg_movement
-
-		# Plot the corners on the flow frame and frame
-		for i, corner in enumerate(self.corners):
-			cv2.circle(self.flow_frame, tuple(corner.astype(int)), 5, COLORS[i], -1)
-			cv2.circle(self.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
-   
-		# Convert flow frame to BGR for display
-		self.flow_frame = cv2.cvtColor(self.flow_frame, cv2.COLOR_RGB2BGR)
+		updateCorners(Frame1=self, Frame2=self.next_frame, miny=miny, maxy=maxy, trackers=trackers)
   
 	def getRGBHistogram(self, bboxes):
 		# Calculate an rgb histogram based on the detected bboxes
@@ -283,3 +227,75 @@ class Frame():
   
 		if cv2.waitKey(1):
 			return
+
+def updateCorners(Frame1: Frame, Frame2: Frame, miny=0, maxy=0, trackers=[]):
+	frame1_img = Frame1.img.copy()
+	frame2_img = Frame2.img.copy()
+ 
+	# for tracker in trackers:
+	# 	frame1_img = tracker.get_frame_wo_tracks(frame1_img)
+	# 	frame2_img = tracker.get_frame_wo_tracks(frame2_img)
+ 
+	# Apply canny edge detection to the curr and next frames
+	frame1_img = cv2.Canny(frame1_img, 100, 200)
+	frame2_img = cv2.Canny(frame2_img, 100, 200)
+ 
+	# Calculate optical flow
+	flow = cv2.calcOpticalFlowFarneback(frame2_img, frame1_img, None, 0.5, 10, 30, 3, 5, 1.5, 0)
+ 
+	# Create a flow frame to display the flow vectors
+	Frame1.flow_frame = np.zeros((flow.shape[0], flow.shape[1], 3), dtype=np.uint8)
+ 
+	# Reset flow vectors in range miny to maxy
+	flow[miny:maxy, :, :] = 0
+ 
+	# Reset top & bottom 15% of flow vectors
+	flow[:int(flow.shape[0] * 0.15), :, :] = 0
+	flow[int(flow.shape[0] * 0.85):, :, :] = 0
+ 
+	# Calculate the average x and y movement ignoring vectors with magnitude less than 1
+	avg_movement = np.array([0, 0], dtype=np.float32)
+	count = 0
+	
+	# Loop through each pixel in the flow
+	for y in range(0, flow.shape[0], 10):
+		for x in range(0, flow.shape[1], 10):
+			# Get the flow vector
+			fx, fy = flow[y, x]
+ 
+			# If the magnitude of the flow vector is greater than 1, add it to the average movement
+			if np.sqrt(fx ** 2 + fy ** 2) > 1.5:
+				avg_movement += np.array([fx, fy], dtype=np.float32)
+				count += 1
+ 
+			# Draw the flow vector in red if moving right, blue if moving left
+			if fx > 0:
+				cv2.line(Frame1.flow_frame, (x, y), (x + int(fx), y + int(fy)), (0, 0, 255), 1)
+			else:
+				cv2.line(Frame1.flow_frame, (x, y), (x + int(fx), y + int(fy)), (255, 0, 0), 1)
+
+	# Divide the average movement by the number of vectors to get the average movement
+	avg_movement /= count
+	
+	# Take a copy of the next frame's corners and increment their age
+	Frame1.corners = Frame2.corners.copy()
+	Frame1.diagram_corners = Frame2.diagram_corners.copy()
+ 
+	Frame1.corners_age = Frame2.corners_age + 1
+	
+	# Increase avg_movement proportional to the age of the corners
+	avg_movement *= (Frame1.corners_age ** 1.1) * 0.001 + 1
+ 
+	# Update corners with average movement
+	avg_movement = avg_movement.astype(int)
+	
+	for i in range(len(Frame1.corners)):
+		Frame1.corners[i] += avg_movement
+	
+	# Plot the corners on the flow frame and frame
+	for i, corner in enumerate(Frame1.corners):
+		cv2.circle(Frame1.flow_frame, tuple(corner.astype(int)), 5, COLORS[i], -1)
+		cv2.circle(Frame1.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
+	
+	# Convert flow frame to BGR for display
+	Frame1.flow_frame = cv2.cvtColor(Frame1.flow_frame, cv2.COLOR_RGB2BGR)
