@@ -303,6 +303,9 @@ def updateCorners(Frame1: Frame, Frame2: Frame, miny=0, maxy=0, trackers=[]):
 	
 	# Plot the corners on the flow frame and frame
 	for i, corner in enumerate(Frame1.corners):
+		# Check if the corner is within the frame
+		if corner[0] < 0 or corner[0] >= Frame1.img.shape[1] or corner[1] < 0 or corner[1] >= Frame1.img.shape[0]:
+			continue # Skip the corner if it is not within the frame
 		cv2.circle(Frame1.flow_frame, tuple(corner.astype(int)), 5, COLORS[i], -1)
 		cv2.circle(Frame1.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
 	
