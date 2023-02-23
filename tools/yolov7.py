@@ -17,6 +17,7 @@ class Yolov7Wrapper():
   
 		self.half = self.device.type != "cpu"
 		
+		print("Loading model from", weights, "on", self.device, "with imgsz", imgsz, "and half", self.half)
 		self.model = attempt_load(weights, map_location=self.device)
 		self.stride = int(self.model.stride.max())
 		self.imgsz = check_img_size(imgsz, self.stride)

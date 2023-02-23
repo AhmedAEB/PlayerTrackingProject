@@ -149,7 +149,7 @@ if __name__ == "__main__":
 	parser.add_argument("--source", type=str, default="./data/input.mp4", help="Path to a basketball video")
 	parser.add_argument("--save_path", type=str, default="./data/output.mp4", help="Path to save the output video to")
 	parser.add_argument("--yolo_weights", type=str, default="./weights/cleanedDatasetWeights.pt", help="Path to the YOLO weights file (.pt)")
-	parser.add_argument("--yolo_seg_weights", type=str, default="./weights/best.pt", help="Path to the YOLO segmentation weights file (.pt)")
+	parser.add_argument("--yolo_seg_weights", type=str, default="./weights/freethrow.pt", help="Path to the YOLO segmentation weights file (.pt)")
 	parser.add_argument("--deepsort_weights", type=str, default="./weights/market1501.pb", help="Path to the DeepSORT weights file (.pb)")
 	parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
 	parser.add_argument("--show_process", action="store_true", help="Show the intermediate frames")
