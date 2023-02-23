@@ -62,12 +62,15 @@ class Yolov7SegWrapper():
 		if not len(dets):
 			# Return black image same size as original image
 			return torch.zeros(orig.shape, dtype=torch.uint8).numpy()
-   
+
 		# Process detections and extract masks
 		masks = process_mask(proto[0], dets[:, 6:], dets[:, :4], img.shape[2:], upsample=True)  # HWC
-		
+  
   		# Rescale boxes from img_size to original size
 		dets[:, :4] = scale_coords(img.shape[2:], dets[:, :4], orig.shape).round()
+   
+		# Detach from GPU
+		masks = masks.detach().cpu()
 	
 		# Draw masks on image
 		if draw_masks:
