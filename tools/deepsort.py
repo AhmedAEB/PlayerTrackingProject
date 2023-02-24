@@ -81,7 +81,7 @@ class DeepSortWrapper():
 
 		return frame
 
-	def get_min_max(self):
+	def get_min_max_y(self):
 		miny, maxy = 1e+10, 0
 		for track in self.tracker.tracks:
 			if not track.is_confirmed() or track.time_since_update > 1:

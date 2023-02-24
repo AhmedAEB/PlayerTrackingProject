@@ -12,8 +12,11 @@ from tools.yolov7_seg import Yolov7SegWrapper
 from tools.frame import Frame
 
 def run(opt):
+    # Debugging Arguments
+	show_process, nframes = opt.show_process, opt.nframes
+    
 	# Get arguments
-	source, save_path, yolo_weights, yolo_seg_weights, deepsort_weights, device, show_process = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.yolo_seg_weights, opt.deepsort_weights, opt.device, opt.show_process
+	source, save_path, yolo_weights, yolo_seg_weights, deepsort_weights, device = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.yolo_seg_weights, opt.deepsort_weights, opt.device
 	
 	# Get hyperparameters
 	max_cos_dist, nn_budget, iou_th, conf_th, iou_th_seg, conf_th_seg, max_track_age, init_phase_frames = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.iou_th_seg, opt.conf_th_seg, opt.max_track_age, opt.init_phase_frames
@@ -43,7 +46,7 @@ def run(opt):
 	total_time = 0
  
 	# Get total number of frames
-	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT)) if nframes is None else nframes
  
 	# Get first frame from video
 	_, first = video.read()
@@ -54,7 +57,7 @@ def run(opt):
 	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
 
 	# Loop through all frames
-	for i in trange(total_frames, desc="1/3 - YOLOv7 + DeepSORT + YOLACT"):
+	for i in trange(total_frames, desc="1/3 - YOLOv7 + DeepSORT + YOLACT + Forward Optical Flow"):
 		# Start timer for current frame
 		start = perf_counter()
 
@@ -77,14 +80,9 @@ def run(opt):
 		# Run player and referee detection + tracking (yolov7 + deepsort)
 		frame.detectAndTrack(yolov7, [player_tracker, referee_tracker])
   
+		# Run forward optical flow to find player and referee positions
 		if frame.mask is None:
-			miny_p, maxy_p = player_tracker.get_min_max()
-			miny_r, maxy_r = referee_tracker.get_min_max()
-			miny, maxy = min(miny_p, miny_r), max(maxy_p, maxy_r)
-			# Add 3% to the miny and maxy
-			miny, maxy = int(miny * 0.97), int(maxy * 1.03)
-			
-			frame.updateCorners(miny, maxy, [player_tracker, referee_tracker])
+			frame.updateCorners()
 		
 		# Draw white square in top left corner for text
 		cv2.rectangle(frame.img, (0, 0), (185, 100), (255, 255, 255), -1)
@@ -99,16 +97,13 @@ def run(opt):
   
 		# Save the next frame for the next iteration
 		frame.prev_frame.next_frame = frame
-  
-		# if i == 100: # ONLY FOR TESTING
-		# 	break
 					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start
 		i += 1
   
 	# Loop back through frames to add the player and referee positions to the diagram
-	for _ in trange(total_frames, desc="2/3 - Optical Flow + Homography"):
+	for _ in trange(total_frames, desc="2/3 - Backwards Optical Flow + Homography"):
 		# Update the diagram with the player and referee positions
 		frame.updateCornersBackwards()
 		frame.updateDiagram()
@@ -154,7 +149,8 @@ if __name__ == "__main__":
 	parser.add_argument("--yolo_seg_weights", type=str, default="./weights/freethrow.pt", help="Path to the YOLO segmentation weights file (.pt)")
 	parser.add_argument("--deepsort_weights", type=str, default="./weights/market1501.pb", help="Path to the DeepSORT weights file (.pb)")
 	parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-	parser.add_argument("--show_process", action="store_true", help="Show the intermediate frames")
+	parser.add_argument("--show_process", action="store_true", help="Show the intermediate frames (for debugging)")
+	parser.add_argument("--nframes", type=int, default=None, help="Number of frames to process (for debugging)")
  
 	# Hyperparameters #TODO: Review the help strings
 	parser.add_argument("--max_cos_dist", type=float, default=0.4, help="Maximum cosine distance for a track to be considered a match")

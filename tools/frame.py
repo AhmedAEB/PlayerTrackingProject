@@ -19,12 +19,14 @@ class Frame():
   
 		self.corners = None
 		self.diagram_corners = None
-		self.corners_age = 0
+		self.corners_age = None
 		self.mask = None
 		self.polygon = None
 		self.flow_frame = None
 
 		self.positions = [] # x, y
+		self.miny = h + 1
+		self.maxy = 0
 		self.colours = [] # r, g, b
   
 	def detectAndTrack(self, yoloWrapper: Yolov7Wrapper, trackers: [DeepSortWrapper]):
@@ -55,12 +57,19 @@ class Frame():
 					# Run a RGB histogram on the players
 					self.getRGBHistogram(class_bboxes)
      
+				# Get the positions of the players and their colours
 				colours, positions = tracker.get_positions_c()
     
+				# Check if there are any positions
 				if len(positions) > 0:
 					# Append the positions to the list of positions
 					self.positions.extend(positions)
 					self.colours.extend(colours)
+     
+				# Update the min and max y values
+				miny, maxy = tracker.get_min_max_y()
+				self.miny = min(self.miny, miny)
+				self.maxy = max(self.maxy, maxy)
     
 	def detectMask(self, yoloWrapper: Yolov7SegWrapper):
 		# Use yolo to detect the free throw area
@@ -76,12 +85,15 @@ class Frame():
 		# If the mask is too small, or is within 1% of the image right or left, remove it
 		if mask_area < 0.025 or self.mask[:, :self.w//100].any() or self.mask[:, -self.w//100:].any():
 			self.mask = None
+			self.corners_age = 1e+5
 		else:
 			# Convert the mask to a polygon
 			self.convertMaskToPolygon()
    
 			# Get the corner points of the polygon
 			self.getCornerPoints()
+   
+			self.corners_age = 0
 
 	def convertMaskToPolygon(self):
 		# Find contours
@@ -175,18 +187,17 @@ class Frame():
 		for i, corner in enumerate(self.diagram_corners):
 			cv2.circle(self.diagram, tuple(corner.astype(int)), 10, COLORS[i], -1)
 		
-	def updateCorners(self, miny=0, maxy=0, trackers=[]):
+	def updateCorners(self):
 		if self.prev_frame is None or self.prev_frame.corners is None:
-			self.corners_age = 1e+5
 			return
      
-		updateCorners(Frame1=self, Frame2=self.prev_frame, miny=miny, maxy=maxy, trackers=trackers)
+		updateCorners(Frame1=self, Frame2=self.prev_frame)
   
-	def updateCornersBackwards(self, miny=0, maxy=0, trackers=[]):
+	def updateCornersBackwards(self):
 		if self.next_frame is None or (self.corners_age <= self.next_frame.corners_age and self.corners_age != 1e+5):
 			return
      
-		updateCorners(Frame1=self, Frame2=self.next_frame, miny=miny, maxy=maxy, trackers=trackers)
+		updateCorners(Frame1=self, Frame2=self.next_frame)
   
 	def getRGBHistogram(self, bboxes):
 		# Calculate an rgb histogram based on the detected bboxes
@@ -237,9 +248,15 @@ class Frame():
 		if cv2.waitKey(1):
 			return
 
-def updateCorners(Frame1: Frame, Frame2: Frame, miny=0, maxy=0, trackers=[]):
+def updateCorners(Frame1: Frame, Frame2: Frame):
 	frame1_img = Frame1.img.copy()
 	frame2_img = Frame2.img.copy()
+ 
+	miny = min(Frame1.miny, Frame2.miny)
+	maxy = max(Frame1.maxy, Frame2.maxy)
+
+	# Add 3% to the miny and maxy
+	miny, maxy = int(miny * 0.97), int(maxy * 1.03)
  
 	# for tracker in trackers:
 	# 	frame1_img = tracker.get_frame_wo_tracks(frame1_img)
