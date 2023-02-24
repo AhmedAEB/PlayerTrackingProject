@@ -54,10 +54,6 @@ class Frame():
 				
 				# Update the tracker
 				tracker.update(self.img, class_bboxes, class_scores)
-    
-				if i == 0: # Players
-					# Run a RGB histogram on the players
-					self.getRGBHistogram(class_bboxes)
      
 				# Get the positions of the players and their colours
 				colours, positions = tracker.get_positions_c()
@@ -200,32 +196,6 @@ class Frame():
 			return
      
 		updateCorners(Frame1=self, Frame2=self.next_frame)
-  
-	def getRGBHistogram(self, bboxes):
-		# Calculate an rgb histogram based on the detected bboxes
-		images = []
-		for bbox in bboxes:
-			x, y, w, h = bbox.astype(int)
-			roi = self.img[y:y+h, x:x+w]
-			images.append(roi)
-   
-		hist = np.zeros((256, 3))
-  
-		# Loop through each image
-		for image in images:
-			# Loop through each channel
-			for i in range(3):
-				# Get the histogram for the channel
-				channel_hist = cv2.calcHist([image], [i], None, [256], [0, 256])
-				# Add the channel histogram to the total histogram
-				hist[:, i] += channel_hist[:, 0]
-    
-		# Normalize the histogram
-		hist /= np.sum(hist)
-  
-		cv2.imshow("Histogram", hist)
-	
-		return hist
   
 	def displayAll(self, debug: bool = False):
 		if not debug:

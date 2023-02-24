@@ -139,7 +139,6 @@ def run(opt):
 		# Update the frame
 		frame = frame.next_frame
 
-
 	print(f"\nFPS: {i/total_time:.2f} Hz")
 	cv2.destroyAllWindows()
 	video.release() # Release video
