@@ -1,3 +1,5 @@
+from typing import List
+
 import cv2
 import numpy as np
 
@@ -29,7 +31,7 @@ class Frame():
 		self.maxy = 0
 		self.colours = [] # r, g, b
   
-	def detectAndTrack(self, yoloWrapper: Yolov7Wrapper, trackers: [DeepSortWrapper]):
+	def detectAndTrack(self, yoloWrapper: Yolov7Wrapper, trackers: List[DeepSortWrapper]):
 		# Use YOLO to detect players and referees
 		detections = yoloWrapper.detect(self.img, draw_bboxes=False)
 		self.bboxes, self.scores, self.classes = [], [], []
@@ -225,7 +227,7 @@ class Frame():
 	
 		return hist
   
-	def displayAll(self, debug=False):
+	def displayAll(self, debug: bool = False):
 		if not debug:
 			return
      
