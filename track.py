@@ -82,7 +82,7 @@ def run(opt):
 			total_frames = i
 			break
 
-		frame = Frame(orig, frame, w, h)
+		frame = Frame(orig, i, w, h)
     
 		# Convert frame to RGB
 		frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
@@ -102,23 +102,65 @@ def run(opt):
 		# If mask is None then there is no free throw area so append frame to queue
 		if frame.mask is None and i != total_frames - 1:
 			continue
+  
+		backwardsQueue = []
 
-		# Update corners using forward optical flow for all frames in queue
-		while len(queue) > 2:
+		if queue[-1].corners is not None and queue[0].corners is not None:
+			backwards = True
+			forwards = True
+			loops = (len(queue) - 2) // 2
+		elif queue[-1].corners is not None:
+			backwards = True
+			forwards = False
+			loops = (len(queue) - 1)
+		elif queue[0].corners is not None:
+			backwards = False
+			forwards = True
+			loops = (len(queue) - 1)
+		else:
+			# throw error
+			print("Error: No corners found")
+   
+		# Update corners using forward & Backwards optical flow for all frames in queue
+		for _ in range(loops):
+			if forwards:
+				updateCorners(queue[1], queue[0])
+				saveFrame(
+					diagram = diagram_empty.copy(),
+					frame = queue.popleft(),
+					output = output,
+					player_tracker = player_tracker,
+					referee_tracker = referee_tracker,
+					debug = show_process
+				)
+    
+			if backwards:
+				updateCorners(queue[-2], queue[-1])
+				backwardsQueue.append(queue.pop())
+   
+		# If there is an odd number of frames in the queue then update the middle frame
+		if len(queue) > 2 and len(queue) % 2 == 1:
 			updateCorners(queue[1], queue[0])
 			saveFrame(
-       			diagram = diagram_empty.copy(),
+				diagram = diagram_empty.copy(),
 				frame = queue.popleft(),
 				output = output,
 				player_tracker = player_tracker,
 				referee_tracker = referee_tracker,
 				debug = show_process
 			)
+  
+		if len(queue) >= 1 and backwards:
+			while queue:
+				backwardsQueue.append(queue.pop())
+		elif len(queue) == 2:
+			backwardsQueue.append(queue.popleft())
    
-		if len(queue) == 2:
+		# Run through backwards to save frames in correct order
+		for _ in range(len(backwardsQueue)):
 			saveFrame(
 				diagram = diagram_empty.copy(),
-				frame = queue.popleft(),
+				frame = backwardsQueue.pop(),
 				output = output,
 				player_tracker = player_tracker,
 				referee_tracker = referee_tracker,

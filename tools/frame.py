@@ -12,8 +12,9 @@ from matplotlib import pyplot as plt
 COLORS = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0), (255, 0, 255), (0, 255, 255), (255, 255, 255), (0, 0, 0)]
 
 class Frame():
-	def __init__(self, img, prev_frame, w, h):
+	def __init__(self, img, n, w, h):
 		self.img = img
+		self.n = n# frame number for debugging
 		self.w, self.h = w, h
   
 		self.corners = None
@@ -56,21 +57,21 @@ class Frame():
 				
 				# Update the tracker
 				tracker.update(self.img, class_bboxes, class_scores)
-     
+	 
 				# Get the positions of the players and their colours
 				colours, positions = tracker.get_positions_c()
-    
+	
 				# Check if there are any positions
 				if len(positions) > 0:
 					# Append the positions to the list of positions
 					self.positions.extend(positions)
 					self.colours.extend(colours)
-     
+	 
 				# Update the min and max y values
 				miny, maxy = tracker.get_min_max_y()
 				self.miny = min(self.miny, miny)
 				self.maxy = max(self.maxy, maxy)
-    
+	
 	def detectMask(self, yoloWrapper: Yolov7SegWrapper):
 		# Use yolo to detect the free throw area
 		self.mask = yoloWrapper.detect(self.img)
@@ -170,7 +171,7 @@ class Frame():
 		# if corners or diagram corners are not set, return
 		if self.corners is None or self.diagram_corners is None:
 			return diagram
-     
+	 
 		# Get the transformation matrix
 		M = cv2.getPerspectiveTransform(self.corners, self.diagram_corners)
   
@@ -181,7 +182,7 @@ class Frame():
 			for i, position in enumerate(positions[0]):
 				x, y = position.astype(int)
 				cv2.circle(diagram, (x, y), 15, self.colours[i], -1)
-    
+	
 		# Display corners on diagram
 		for i, corner in enumerate(self.diagram_corners):
 			cv2.circle(diagram, tuple(corner.astype(int)), 10, COLORS[i], -1)
@@ -191,7 +192,7 @@ class Frame():
 	def displayAll(self, debug: bool = False):
 		if not debug:
 			return
-     
+	 
 		# Display the optical flow frame
 		if self.flow_frame is not None:
 			cv2.imshow("Optical Flow", self.flow_frame)
@@ -293,8 +294,8 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 	Frame1.flow_frame = cv2.cvtColor(Frame1.flow_frame, cv2.COLOR_RGB2BGR)
 
 def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, player_tracker: DeepSortWrapper, referee_tracker: DeepSortWrapper, debug: bool = False):
-    # Draw white square in top left corner for text
-	cv2.rectangle(frame.img, (0, 0), (185, 100), (255, 255, 255), -1)
+	# Draw white square in top left corner for text
+	cv2.rectangle(frame.img, (0, 0), (200, 130), (255, 255, 255), -1)
 	
 	# Add number of objects to display frame, split into players and referees
 	cv2.putText(frame.img, f"Players: {len(player_tracker.tracker.tracks)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
@@ -315,9 +316,12 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, player
 	# Add corner age to display frame
 	cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
+	# Add frame number to display frame
+	cv2.putText(frame.img, f"Frame: {frame.n}", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
 	# Write the frame to the output video
 	output.write(frame.img)
-    
+	
 	# Display frame and debug frames
 	if debug:
 		frame.displayAll(debug = True)
