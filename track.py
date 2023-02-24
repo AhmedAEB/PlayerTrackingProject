@@ -13,7 +13,7 @@ from tools.frame import Frame
 
 def run(opt):
     # Debugging Arguments
-	show_process, nframes = opt.show_process, opt.nframes
+	show_process, nframes, skip_frames = opt.show_process, opt.nframes, opt.skip_frames
     
 	# Get arguments
 	source, save_path, yolo_weights, yolo_seg_weights, deepsort_weights, device = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.yolo_seg_weights, opt.deepsort_weights, opt.device
@@ -48,9 +48,15 @@ def run(opt):
 	# Get total number of frames
 	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT)) if nframes is None else nframes
  
-	# Get first frame from video
-	_, first = video.read()
-
+	# Get first frame from video by using skip_frames
+	for _ in range(skip_frames+1):
+		ret, first = video.read()
+  
+		# Check if video has ended
+		if not ret:
+			total_frames = 0
+			break
+	
 	frame = Frame(first, None, w, h)
  
 	# Convert frame to RGB
@@ -167,6 +173,7 @@ if __name__ == "__main__":
 	parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
 	parser.add_argument("--show_process", action="store_true", help="Show the intermediate frames (for debugging)")
 	parser.add_argument("--nframes", type=int, default=None, help="Number of frames to process (for debugging)")
+	parser.add_argument("--skip_frames", type=int, default=0, help="Number of frames to skip (for debugging)")
  
 	# Hyperparameters #TODO: Review the help strings
 	parser.add_argument("--max_cos_dist", type=float, default=0.4, help="Maximum cosine distance for a track to be considered a match")
