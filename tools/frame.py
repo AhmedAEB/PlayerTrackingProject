@@ -183,7 +183,7 @@ class Frame():
 		updateCorners(Frame1=self, Frame2=self.prev_frame, miny=miny, maxy=maxy, trackers=trackers)
   
 	def updateCornersBackwards(self, miny=0, maxy=0, trackers=[]):
-		if self.next_frame is None or self.corners_age < self.next_frame.corners_age:
+		if self.next_frame is None or (self.corners_age <= self.next_frame.corners_age and self.corners_age != 1e+5):
 			return
      
 		updateCorners(Frame1=self, Frame2=self.next_frame, miny=miny, maxy=maxy, trackers=trackers)
@@ -293,7 +293,7 @@ def updateCorners(Frame1: Frame, Frame2: Frame, miny=0, maxy=0, trackers=[]):
 	Frame1.corners_age = Frame2.corners_age + 1
 	
 	# Increase avg_movement proportional to the age of the corners
-	avg_movement *= (Frame1.corners_age ** 1.1) * 0.001 + 1
+	avg_movement *= (Frame1.corners_age ** 1.09) * 0.01 + 1
  
 	# Update corners with average movement
 	avg_movement = avg_movement.astype(int)
