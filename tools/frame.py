@@ -20,7 +20,7 @@ class Frame():
   
 		self.corners = None
 		self.diagram_corners = None
-		self.corners_age = None
+		self.corners_age = 1e+5
 		self.mask = None
 		self.polygon = None
 		self.flow_frame = None
@@ -87,7 +87,6 @@ class Frame():
 		# If the mask is too small, or is within 1% of the image right or left, remove it
 		if mask_area < 0.025 or self.mask[:, :self.w//100].any() or self.mask[:, -self.w//100:].any():
 			self.mask = None
-			self.corners_age = 1e+5
 		else:
 			# Convert the mask to a polygon
 			self.convertMaskToPolygon()
@@ -169,12 +168,10 @@ class Frame():
 		for i, corner in enumerate(self.corners):
 			cv2.circle(self.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
 
-	def applyHomography(self):
-		diagram = cv2.imread('diagram.png')
-     
+	def applyHomography(self, diagram: np.ndarray):
 		# if corners or diagram corners are not set, return
 		if self.corners is None or self.diagram_corners is None:
-			return
+			return diagram
      
 		# Get the transformation matrix
 		M = cv2.getPerspectiveTransform(self.corners, self.diagram_corners)
@@ -202,7 +199,7 @@ class Frame():
 	def updateCornersBackwards(self):
 		if self.next_frame is None or (self.corners_age <= self.next_frame.corners_age and self.corners_age != 1e+5):
 			return
-     
+
 		updateCorners(Frame1=self, Frame2=self.next_frame)
   
 	def displayAll(self, debug: bool = False):

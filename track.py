@@ -107,7 +107,7 @@ def run(opt):
   
 	# Loop back through frames to add the player and referee positions to the diagram
 	for _ in trange(total_frames, desc="2/3 - Backwards Optical Flow"):
-		# Update the diagram with the player and referee positions
+		# Update corners using backwards optical flow
 		frame.updateCornersBackwards()
   
 		# Display frame and debug frames
@@ -117,10 +117,18 @@ def run(opt):
 		# Move to the previous frame
 		frame = frame.prev_frame
   
+	# Final frame (first frame)
+	frame.updateCornersBackwards()
+	
+	# Read diagram image
+	diagram_empty = cv2.imread('diagram.jpg')
+	
 	# Write the final diagram to the output video
-	for _ in trange(total_frames, desc="3/3 - Homography + Video Writing"):
+	for _ in trange(total_frames + 1, desc="3/3 - Homography + Video Writing"):
+		diagram = diagram_empty.copy()
+     
 		# Get the homography for the current frame
-		diagram = frame.applyHomography()
+		diagram = frame.applyHomography(diagram)
      
 		# Place a downsized version of the diagram in the top right corner of the frame
 		small_diagram = cv2.resize(diagram, (0, 0), fx=0.25, fy=0.25)
