@@ -18,9 +18,6 @@ def run(opt):
 	# Get hyperparameters
 	max_cos_dist, nn_budget, iou_th, conf_th, iou_th_seg, conf_th_seg, max_track_age, init_phase_frames = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.iou_th_seg, opt.conf_th_seg, opt.max_track_age, opt.init_phase_frames
 
-	# Initialise paused flag
-	paused = False
-
 	# Initialise YOLOv7 wrapper for player and referee detection
 	yolov7 = Yolov7Wrapper(device, yolo_weights, iou_th=iou_th, conf_th=conf_th)
 
@@ -57,7 +54,7 @@ def run(opt):
 	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
 
 	# Loop through all frames
-	for i in trange(total_frames, desc="YOLOv7 + DeepSORT + YOLACT"):
+	for i in trange(total_frames, desc="1/3 - YOLOv7 + DeepSORT + YOLACT"):
 		# Start timer for current frame
 		start = perf_counter()
 
@@ -66,6 +63,7 @@ def run(opt):
   
 		# Check if video has ended
 		if not ret:
+			total_frames = i
 			break
 
 		frame = Frame(orig, frame, w, h)
@@ -102,26 +100,26 @@ def run(opt):
 		# Save the next frame for the next iteration
 		frame.prev_frame.next_frame = frame
   
-		if i == 100: # ONLY FOR TESTING
-			break
+		# if i == 100: # ONLY FOR TESTING
+		# 	break
 					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start
 		i += 1
   
 	# Loop back through frames to add the player and referee positions to the diagram
-	while frame.prev_frame is not None:
+	for _ in trange(total_frames, desc="2/3 - Optical Flow + Homography"):
 		# Update the diagram with the player and referee positions
 		frame.updateCornersBackwards()
 		frame.updateDiagram()
 		frame = frame.prev_frame
-	
+  
 	# Write the final diagram to the output video
-	while frame.next_frame is not None:
+	for _ in trange(total_frames, desc="3/3 - Writing Video"):
 		# Place a downsized version of the diagram in the top right corner of the frame
 		small_diagram = cv2.resize(frame.diagram, (0, 0), fx=0.25, fy=0.25)
 	
-		# Display the diagram in the top right corner of the frame
+		# Add the diagram to the top right corner of the frame
 		frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
   
 		# Convert frame to BGR for writing to video
@@ -132,16 +130,20 @@ def run(opt):
 	 
 		# Write the frame to the output video
 		output.write(frame.img)
-		cv2.imshow("Video", frame.img)
+  
+		if show_process:
+			# Display the frame
+			cv2.imshow("Video", frame.img)
+			# Display the video at the correct fps
+			cv2.waitKey(int(1000/fps))
   
 		# Update the frame
 		frame = frame.next_frame
-  
-		# Display the video at the correct fps
-		cv2.waitKey(int(1000/fps))
+		
 
 	print(f"\nFPS: {i/total_time:.2f} Hz")
 	cv2.destroyAllWindows()
+	video.release() # Release video
 
 
 if __name__ == "__main__":
