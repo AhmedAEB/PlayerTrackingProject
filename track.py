@@ -107,6 +107,12 @@ def run(opt):
 		# Update the diagram with the player and referee positions
 		frame.updateCornersBackwards()
 		frame.updateDiagram()
+  
+		# Display frame and debug frames
+		if show_process:
+			frame.displayAll(debug = True)
+   
+		# Move to the previous frame
 		frame = frame.prev_frame
   
 	# Write the final diagram to the output video
@@ -129,8 +135,6 @@ def run(opt):
 		if show_process:
 			# Display the frame
 			cv2.imshow("Video", frame.img)
-			# Display the video at the correct fps
-			cv2.waitKey(int(1000/fps))
   
 		# Update the frame
 		frame = frame.next_frame
