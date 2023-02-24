@@ -5,11 +5,12 @@ from tqdm import trange
 
 import cv2
 import numpy as np
+from collections import deque
 
 from tools.deepsort import DeepSortWrapper
 from tools.yolov7 import Yolov7Wrapper
 from tools.yolov7_seg import Yolov7SegWrapper
-from tools.frame import Frame
+from tools.frame import Frame, updateCorners, saveFrame
 
 def run(opt):
     # Debugging Arguments
@@ -45,6 +46,9 @@ def run(opt):
 	# Initialise variables for tracking
 	total_time = 0
  
+	# Queue for storing previous frames for optical flow
+	queue = deque()
+ 
 	# Get total number of frames
 	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT)) if nframes is None else nframes
  
@@ -61,6 +65,9 @@ def run(opt):
  
 	# Convert frame to RGB
 	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
+ 
+	# Read diagram image
+	diagram_empty = cv2.imread('diagram.jpg')
 
 	# Loop through all frames
 	for i in trange(total_frames, desc="1/3 - YOLOv7 + DeepSORT + YOLACT + Forward Optical Flow"):
@@ -85,79 +92,39 @@ def run(opt):
   
 		# Run player and referee detection + tracking (yolov7 + deepsort)
 		frame.detectAndTrack(yolov7, [player_tracker, referee_tracker])
-  
-		# Run forward optical flow to find player and referee positions
-		if frame.mask is None:
-			frame.updateCorners()
-		
-		# Draw white square in top left corner for text
-		cv2.rectangle(frame.img, (0, 0), (185, 100), (255, 255, 255), -1)
-		
-		# Add number of objects to display frame, split into players and referees
-		cv2.putText(frame.img, f"Players: {len(player_tracker.tracker.tracks)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-		cv2.putText(frame.img, f"Referees: {len(referee_tracker.tracker.tracks)}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-		
-		# Display frame and debug frames
-		if show_process:
-			frame.displayAll(debug = True)
-  
-		# Save the next frame for the next iteration
-		frame.prev_frame.next_frame = frame
-  
-		# Clear some memory
-		frame.clearMemory()
 					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start
 		i += 1
   
-	# Loop back through frames to add the player and referee positions to the diagram
-	for _ in trange(total_frames, desc="2/3 - Backwards Optical Flow"):
-		# Update corners using backwards optical flow
-		frame.updateCornersBackwards()
+		queue.append(frame)
   
-		# Display frame and debug frames
-		if show_process:
-			frame.displayAll(debug = True)
-   
-		# Move to the previous frame
-		frame = frame.prev_frame
-  
-	# Final frame (first frame)
-	frame.updateCornersBackwards()
-	
-	# Read diagram image
-	diagram_empty = cv2.imread('diagram.jpg')
-	
-	# Write the final diagram to the output video
-	for _ in trange(total_frames + 1, desc="3/3 - Homography + Video Writing"):
-		diagram = diagram_empty.copy()
-     
-		# Get the homography for the current frame
-		diagram = frame.applyHomography(diagram)
-     
-		# Place a downsized version of the diagram in the top right corner of the frame
-		small_diagram = cv2.resize(diagram, (0, 0), fx=0.25, fy=0.25)
-	
-		# Add the diagram to the top right corner of the frame
-		frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
-  
-		# Convert frame to BGR for writing to video
-		frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
-  
-		# Add corner age to display frame
-		cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-	 
-		# Write the frame to the output video
-		output.write(frame.img)
-  
-		if show_process:
-			# Display the frame
-			cv2.imshow("Video", frame.img)
-  
-		# Update the frame
-		frame = frame.next_frame
+		# If mask is None then there is no free throw area so append frame to queue
+		if frame.mask is None and i != total_frames - 1:
+			continue
 
+		# Update corners using forward optical flow for all frames in queue
+		while len(queue) > 2:
+			updateCorners(queue[1], queue[0])
+			saveFrame(
+       			diagram = diagram_empty.copy(),
+				frame = queue.popleft(),
+				output = output,
+				player_tracker = player_tracker,
+				referee_tracker = referee_tracker,
+				debug = show_process
+			)
+   
+		if len(queue) == 2:
+			saveFrame(
+				diagram = diagram_empty.copy(),
+				frame = queue.popleft(),
+				output = output,
+				player_tracker = player_tracker,
+				referee_tracker = referee_tracker,
+				debug = show_process
+			)
+   
 	print(f"\nFPS: {i/total_time:.2f} Hz")
 	cv2.destroyAllWindows()
 	video.release() # Release video

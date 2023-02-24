@@ -15,8 +15,6 @@ class Frame():
 	def __init__(self, img, prev_frame, w, h):
 		self.img = img
 		self.w, self.h = w, h
-		self.prev_frame = prev_frame
-		self.next_frame = None
   
 		self.corners = None
 		self.diagram_corners = None
@@ -189,18 +187,6 @@ class Frame():
 			cv2.circle(diagram, tuple(corner.astype(int)), 10, COLORS[i], -1)
    
 		return diagram
-		
-	def updateCorners(self):
-		if self.prev_frame is None or self.prev_frame.corners is None:
-			return
-     
-		updateCorners(Frame1=self, Frame2=self.prev_frame)
-  
-	def updateCornersBackwards(self):
-		if self.next_frame is None or (self.corners_age <= self.next_frame.corners_age and self.corners_age != 1e+5):
-			return
-
-		updateCorners(Frame1=self, Frame2=self.next_frame)
   
 	def displayAll(self, debug: bool = False):
 		if not debug:
@@ -305,3 +291,36 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 	
 	# Convert flow frame to BGR for display
 	Frame1.flow_frame = cv2.cvtColor(Frame1.flow_frame, cv2.COLOR_RGB2BGR)
+
+def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, player_tracker: DeepSortWrapper, referee_tracker: DeepSortWrapper, debug: bool = False):
+    # Draw white square in top left corner for text
+	cv2.rectangle(frame.img, (0, 0), (185, 100), (255, 255, 255), -1)
+	
+	# Add number of objects to display frame, split into players and referees
+	cv2.putText(frame.img, f"Players: {len(player_tracker.tracker.tracks)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+	cv2.putText(frame.img, f"Referees: {len(referee_tracker.tracker.tracks)}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+	# Get the homography for the current frame
+	diagram = frame.applyHomography(diagram)
+
+	# Place a downsized version of the diagram in the top right corner of the frame
+	small_diagram = cv2.resize(diagram, (0, 0), fx=0.25, fy=0.25)
+
+	# Add the diagram to the top right corner of the frame
+	frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
+
+	# Convert frame to BGR for writing to video
+	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
+
+	# Add corner age to display frame
+	cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+	# Write the frame to the output video
+	output.write(frame.img)
+    
+	# Display frame and debug frames
+	if debug:
+		frame.displayAll(debug = True)
+  
+	# Clear some memory
+	frame.clearMemory()
