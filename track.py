@@ -97,16 +97,18 @@ def run(opt):
   
 		# Save the next frame for the next iteration
 		frame.prev_frame.next_frame = frame
+  
+		# Clear some memory
+		frame.clearMemory()
 					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start
 		i += 1
   
 	# Loop back through frames to add the player and referee positions to the diagram
-	for _ in trange(total_frames, desc="2/3 - Backwards Optical Flow + Homography"):
+	for _ in trange(total_frames, desc="2/3 - Backwards Optical Flow"):
 		# Update the diagram with the player and referee positions
 		frame.updateCornersBackwards()
-		frame.updateDiagram()
   
 		# Display frame and debug frames
 		if show_process:
@@ -116,9 +118,12 @@ def run(opt):
 		frame = frame.prev_frame
   
 	# Write the final diagram to the output video
-	for _ in trange(total_frames, desc="3/3 - Writing Video"):
+	for _ in trange(total_frames, desc="3/3 - Homography + Video Writing"):
+		# Get the homography for the current frame
+		diagram = frame.applyHomography()
+     
 		# Place a downsized version of the diagram in the top right corner of the frame
-		small_diagram = cv2.resize(frame.diagram, (0, 0), fx=0.25, fy=0.25)
+		small_diagram = cv2.resize(diagram, (0, 0), fx=0.25, fy=0.25)
 	
 		# Add the diagram to the top right corner of the frame
 		frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram

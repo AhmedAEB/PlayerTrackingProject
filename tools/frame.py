@@ -14,7 +14,6 @@ COLORS = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0), (255, 0, 255), (
 class Frame():
 	def __init__(self, img, prev_frame, w, h):
 		self.img = img
-		self.diagram = cv2.imread("diagram.jpg")
 		self.w, self.h = w, h
 		self.prev_frame = prev_frame
 		self.next_frame = None
@@ -31,10 +30,15 @@ class Frame():
 		self.maxy = 0
 		self.colours = [] # r, g, b
   
+	def clearMemory(self):
+		# Remove all unnecessary variables to free up memory
+		self.mask = None
+		self.polygon = None
+		self.flow_frame = None
+  
 	def detectAndTrack(self, yoloWrapper: Yolov7Wrapper, trackers: List[DeepSortWrapper]):
 		# Use YOLO to detect players and referees
 		detections = yoloWrapper.detect(self.img, draw_bboxes=False)
-		self.bboxes, self.scores, self.classes = [], [], []
 		
 		if detections is None:
 			bboxes, scores, classes = [], [], []
@@ -165,7 +169,9 @@ class Frame():
 		for i, corner in enumerate(self.corners):
 			cv2.circle(self.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
 
-	def updateDiagram(self):
+	def applyHomography(self):
+		diagram = cv2.imread('diagram.png')
+     
 		# if corners or diagram corners are not set, return
 		if self.corners is None or self.diagram_corners is None:
 			return
@@ -179,11 +185,13 @@ class Frame():
 			positions = cv2.perspectiveTransform(positions, M)
 			for i, position in enumerate(positions[0]):
 				x, y = position.astype(int)
-				cv2.circle(self.diagram, (x, y), 15, self.colours[i], -1)
+				cv2.circle(diagram, (x, y), 15, self.colours[i], -1)
     
 		# Display corners on diagram
 		for i, corner in enumerate(self.diagram_corners):
-			cv2.circle(self.diagram, tuple(corner.astype(int)), 10, COLORS[i], -1)
+			cv2.circle(diagram, tuple(corner.astype(int)), 10, COLORS[i], -1)
+   
+		return diagram
 		
 	def updateCorners(self):
 		if self.prev_frame is None or self.prev_frame.corners is None:

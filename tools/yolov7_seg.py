@@ -68,14 +68,11 @@ class Yolov7SegWrapper():
   
   		# Rescale boxes from img_size to original size
 		dets[:, :4] = scale_coords(img.shape[2:], dets[:, :4], orig.shape).round()
-   
-		# Detach from GPU
-		masks = masks.detach().cpu()
 	
 		# Draw masks on image
 		if draw_masks:
 			# Create black image same size as img[0] using torch
-			black_img = torch.zeros(img[0].shape, dtype=torch.uint8)
+			black_img = torch.zeros(img[0].shape, dtype=torch.uint8, device=self.device)
 			im_masks = plot_masks(black_img, masks, [(255, 255, 255)], alpha=1)  # image with masks shape(imh,imw,3)
 			final_img = scale_masks(img.shape[2:], im_masks, orig.shape)  # scale to original h, w
 		
