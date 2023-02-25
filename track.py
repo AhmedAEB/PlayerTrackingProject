@@ -13,7 +13,7 @@ from tools.yolov7_seg import Yolov7SegWrapper
 from tools.frame import Frame, updateCorners, saveFrame
 
 def displayQ(queue):
-	print("Q:",", ".join([str(frame.n) + " " for frame in queue]))
+	return [str(frame.n) for frame in queue]
 
 def run(opt):
 	# Debugging Arguments
@@ -100,18 +100,21 @@ def run(opt):
 		# If mask is None then there is no free throw area so append frame to queue
 		if frame.n == total_frames - 1:
 			queue.append(frame)
-			# print(f"Adding frame {frame.n} to queue")
+			print(f"Adding frame {frame.n} to queue")
 		elif frame.mask is None:
 			queue.append(frame)
-			# print(f"Adding frame {frame.n} to queue")
+			print(f"Adding frame {frame.n} to queue")
 			continue
-		# else:
-			# print(f"Frame {frame.n} has mask")
+		else:
+			print(f"Frame {frame.n} has mask")
+		
+		if prev_frame is not None:
+	  		print(prev_frame.n, displayQ(queue), frame.n)
 		
   		# Frame has corners
 		if prev_frame is None and frame.corners is not None:
 			# Only do backward optical flow from current frame to all qeued frames
-			print("BACKWARD")
+			print("BACKWARD", len(queue))
 			next_frame = frame
 			for i in range(len(queue) - 1, -1, -1):
 				qframe = queue[i]
@@ -124,12 +127,12 @@ def run(opt):
 			queue.appendleft(prev_frame)
 			for i in range(1, len(queue)):
 				qframe = queue[i]
-       
+	   
 				print(f"Updating corners for frame {qframe.n} from frame {prev_frame.n}")
 				updateCorners(qframe, prev_frame)
 				prev_frame = qframe
-		elif len(queue) > 1:
-			print("HALF")
+		elif len(queue) > 0:
+			print("HALF", len(queue))
 			# If both frames have corners then do half forward and half backward optical flow
 			queue.appendleft(prev_frame)
 			for i in range(1, len(queue)//2):
