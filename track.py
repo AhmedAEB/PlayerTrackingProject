@@ -105,39 +105,27 @@ def run(opt):
 			queue.append(frame)
 			print(f"Adding frame {frame.n} to queue")
 			continue
-		else:
-			print(f"Frame {frame.n} has mask")
-		
-		if prev_frame is not None:
-	  		print(prev_frame.n, displayQ(queue), frame.n)
 		
   		# Frame has corners
 		if prev_frame is None and frame.corners is not None:
 			# Only do backward optical flow from current frame to all qeued frames
-			print("BACKWARD", len(queue))
 			next_frame = frame
 			for i in range(len(queue) - 1, -1, -1):
 				qframe = queue[i]
-				print(f"Updating corners for frame {qframe.n} from frame {next_frame.n}")
 				updateCorners(qframe, next_frame)
 				next_frame = qframe
 		elif frame.corners is None:
-			print("FORWARD")
 			# Only do forward optical flow from previous frame to current frame
 			queue.appendleft(prev_frame)
 			for i in range(1, len(queue)):
 				qframe = queue[i]
-	   
-				print(f"Updating corners for frame {qframe.n} from frame {prev_frame.n}")
 				updateCorners(qframe, prev_frame)
 				prev_frame = qframe
 		elif len(queue) > 0:
-			print("HALF", len(queue))
 			# If both frames have corners then do half forward and half backward optical flow
 			queue.appendleft(prev_frame)
 			for i in range(1, len(queue)//2):
 				qframe = queue[i]
-				print(f"Updating corners for frame {qframe.n} from frame {prev_frame.n}")
 				updateCorners(qframe, prev_frame)
 				prev_frame = qframe
 
@@ -145,7 +133,6 @@ def run(opt):
 			next_frame = frame
 			for i in range(len(queue) - 1, len(queue) // 2 - 1, -1):
 				qframe = queue[i]
-				print(f"Updating corners for frame {qframe.n} from frame {next_frame.n}")
 				updateCorners(qframe, next_frame)
 				next_frame = qframe
 		else:

@@ -294,8 +294,6 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 	Frame1.flow_frame = cv2.cvtColor(Frame1.flow_frame, cv2.COLOR_RGB2BGR)
 
 def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug: bool = False):
-	print(f"Saving frame {frame.n}")
- 
 	# assert that the frame has 4 corners and the diagram has 4 corners
 	assert len(frame.corners) == 4 and len(frame.diagram_corners) == 4
 	
