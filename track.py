@@ -13,9 +13,9 @@ from tools.yolov7_seg import Yolov7SegWrapper
 from tools.frame import Frame, updateCorners, saveFrame
 
 def run(opt):
-    # Debugging Arguments
+	# Debugging Arguments
 	show_process, nframes, skip_frames = opt.show_process, opt.nframes, opt.skip_frames
-    
+	
 	# Get arguments
 	source, save_path, yolo_weights, yolo_seg_weights, deepsort_weights, device = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.yolo_seg_weights, opt.deepsort_weights, opt.device
 	
@@ -83,7 +83,7 @@ def run(opt):
 			break
 
 		frame = Frame(orig, i, w, h)
-    
+	
 		# Convert frame to RGB
 		frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
   
@@ -122,6 +122,7 @@ def run(opt):
 			print("Error: No corners found")
    
 		# Update corners using forward & Backwards optical flow for all frames in queue
+		print(len(queue), forwards, backwards, loops)
 		for _ in range(loops):
 			if forwards:
 				updateCorners(queue[1], queue[0])
@@ -133,22 +134,27 @@ def run(opt):
 					referee_tracker = referee_tracker,
 					debug = show_process
 				)
-    
+	
 			if backwards:
 				updateCorners(queue[-2], queue[-1])
 				backwardsQueue.append(queue.pop())
    
+		print(len(queue), forwards, backwards)
 		# If there is an odd number of frames in the queue then update the middle frame
 		if len(queue) > 2 and len(queue) % 2 == 1:
-			updateCorners(queue[1], queue[0])
-			saveFrame(
-				diagram = diagram_empty.copy(),
-				frame = queue.popleft(),
-				output = output,
-				player_tracker = player_tracker,
-				referee_tracker = referee_tracker,
-				debug = show_process
-			)
+			if backwards:
+				updateCorners(queue[-2], queue[-1])
+				backwardsQueue.append(queue.pop())
+			else:
+				updateCorners(queue[1], queue[0])
+				saveFrame(
+					diagram = diagram_empty.copy(),
+					frame = queue.popleft(),
+					output = output,
+					player_tracker = player_tracker,
+					referee_tracker = referee_tracker,
+					debug = show_process
+				)
   
 		if len(queue) >= 1 and backwards:
 			while queue:
@@ -170,7 +176,6 @@ def run(opt):
 	print(f"\nFPS: {i/total_time:.2f} Hz")
 	cv2.destroyAllWindows()
 	video.release() # Release video
-
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
