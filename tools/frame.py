@@ -309,6 +309,10 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
 	# Add the diagram to the top right corner of the frame
 	frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
 
+	# Display frame and debug frames
+	if debug:
+		frame.displayAll(debug = True)
+  
 	# Convert frame to BGR for writing to video
 	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
 
@@ -320,10 +324,6 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
 
 	# Write the frame to the output video
 	output.write(frame.img)
-	
-	# Display frame and debug frames
-	if debug:
-		frame.displayAll(debug = True)
   
 	# Clear some memory
 	frame.clearMemory()

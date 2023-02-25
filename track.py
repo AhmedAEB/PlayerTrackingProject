@@ -100,10 +100,8 @@ def run(opt):
 		# If mask is None then there is no free throw area so append frame to queue
 		if frame.n == total_frames - 1:
 			queue.append(frame)
-			print(f"Adding frame {frame.n} to queue")
 		elif frame.mask is None:
 			queue.append(frame)
-			print(f"Adding frame {frame.n} to queue")
 			continue
 		
   		# Frame has corners
