@@ -83,8 +83,8 @@ class Frame():
 		# Calculate the percentage area of the detected mask (white pixels)
 		mask_area = np.sum(self.mask == 255) / (self.w * self.h)
 		
-		# If the mask is too small, or is within 1% of the image right or left, remove it
-		if mask_area < 0.025 or self.mask[:, :self.w//100].any() or self.mask[:, -self.w//100:].any():
+		# If the mask is too small, or is within 2% of the image right or left, remove it
+		if mask_area < 0.025 or self.mask[:, :self.w//50].any() or self.mask[:, -self.w//50:].any():
 			self.mask = None
 		else:
 			# Convert the mask to a polygon
@@ -274,7 +274,7 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 	Frame1.corners_age = Frame2.corners_age + 1
 	
 	# Increase avg_movement proportional to the age of the corners
-	avg_movement *= (Frame1.corners_age ** 1.09) * 0.01 + 1
+	avg_movement *= (Frame1.corners_age ** 1.09) * 0.001 + 1
  
 	# Update corners with average movement
 	avg_movement = avg_movement.astype(int)
