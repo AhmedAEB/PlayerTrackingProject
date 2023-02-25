@@ -100,23 +100,24 @@ def run(opt):
 		# If mask is None then there is no free throw area so append frame to queue
 		if frame.n == total_frames - 1:
 			queue.append(frame)
-			print(f"Adding frame {frame.n} to queue")
+			# print(f"Adding frame {frame.n} to queue")
 		elif frame.mask is None:
 			queue.append(frame)
-			print(f"Adding frame {frame.n} to queue")
+			# print(f"Adding frame {frame.n} to queue")
 			continue
-		else:
-			print(f"Frame {frame.n} has mask")
+		# else:
+			# print(f"Frame {frame.n} has mask")
 		
   		# Frame has corners
 		if prev_frame is None and frame.corners is not None:
 			# Only do backward optical flow from current frame to all qeued frames
 			print("BACKWARD")
+			next_frame = frame
 			for i in range(len(queue) - 1, -1, -1):
 				qframe = queue[i]
-				print(f"Updating corners for frame {qframe.n} from frame {frame.n}")
-				qframe.corners = updateCorners(qframe, frame)
-				frame = qframe
+				print(f"Updating corners for frame {qframe.n} from frame {next_frame.n}")
+				updateCorners(qframe, next_frame)
+				next_frame = qframe
 		elif frame.corners is None:
 			print("FORWARD")
 			# Only do forward optical flow from previous frame to current frame
