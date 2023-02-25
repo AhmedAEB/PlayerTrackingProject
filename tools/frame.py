@@ -293,13 +293,11 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 	# Convert flow frame to BGR for display
 	Frame1.flow_frame = cv2.cvtColor(Frame1.flow_frame, cv2.COLOR_RGB2BGR)
 
-def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, player_tracker: DeepSortWrapper, referee_tracker: DeepSortWrapper, debug: bool = False):
-	# Draw white square in top left corner for text
-	cv2.rectangle(frame.img, (0, 0), (200, 130), (255, 255, 255), -1)
+def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug: bool = False):
+	print(f"Saving frame {frame.n} - {len(frame.corners)} - {len(frame.diagram_corners)}")
 	
-	# Add number of objects to display frame, split into players and referees
-	cv2.putText(frame.img, f"Players: {len(player_tracker.tracker.tracks)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-	cv2.putText(frame.img, f"Referees: {len(referee_tracker.tracker.tracks)}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+ 	# Draw white square in top left corner for text
+	cv2.rectangle(frame.img, (0, 0), (200, 70), (255, 255, 255), -1)
 
 	# Get the homography for the current frame
 	diagram = frame.applyHomography(diagram)
@@ -314,10 +312,10 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, player
 	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
 
 	# Add corner age to display frame
-	cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+	cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
 	# Add frame number to display frame
-	cv2.putText(frame.img, f"Frame: {frame.n}", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+	cv2.putText(frame.img, f"Frame: {frame.n}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
 	# Write the frame to the output video
 	output.write(frame.img)

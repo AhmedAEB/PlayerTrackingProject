@@ -12,6 +12,9 @@ from tools.yolov7 import Yolov7Wrapper
 from tools.yolov7_seg import Yolov7SegWrapper
 from tools.frame import Frame, updateCorners, saveFrame
 
+def displayQ(queue):
+	print("Q:",", ".join([str(frame.n) + " " for frame in queue]))
+
 def run(opt):
 	# Debugging Arguments
 	show_process, nframes, skip_frames = opt.show_process, opt.nframes, opt.skip_frames
@@ -49,40 +52,37 @@ def run(opt):
 	# Queue for storing previous frames for optical flow
 	queue = deque()
  
-	# Get total number of frames
-	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT)) if nframes is None else nframes
- 
 	# Get first frame from video by using skip_frames
 	for _ in range(skip_frames+1):
-		ret, first = video.read()
+		ret, orig = video.read()
   
 		# Check if video has ended
 		if not ret:
-			total_frames = 0
 			break
-	
-	frame = Frame(first, None, w, h)
+
+	# Get total number of frames
+	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT)) if nframes is None else nframes
  
-	# Convert frame to RGB
-	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
+	total_frames -= skip_frames if total_frames > skip_frames else 0
+
+	prev_frame = None
  
 	# Read diagram image
 	diagram_empty = cv2.imread('diagram.jpg')
 
 	# Loop through all frames
-	for i in trange(total_frames, desc="1/3 - YOLOv7 + DeepSORT + YOLACT + Forward Optical Flow"):
+	for i in trange(total_frames, desc="Processing..."):
 		# Start timer for current frame
 		start = perf_counter()
-
-		# Get next frame from video
-		ret, orig = video.read()
   
 		# Check if video has ended
 		if not ret:
-			total_frames = i
 			break
 
 		frame = Frame(orig, i, w, h)
+  
+		# Get next frame from video
+		ret, orig = video.read()
 	
 		# Convert frame to RGB
 		frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
@@ -97,81 +97,65 @@ def run(opt):
 		total_time += perf_counter() - start
 		i += 1
   
-		queue.append(frame)
-  
 		# If mask is None then there is no free throw area so append frame to queue
-		if frame.mask is None and i != total_frames - 1:
+		if frame.n == total_frames - 1:
+			queue.append(frame)
+			print(f"Adding frame {frame.n} to queue")
+		elif frame.mask is None:
+			queue.append(frame)
+			print(f"Adding frame {frame.n} to queue")
 			continue
-  
-		backwardsQueue = []
-
-		if queue[-1].corners is not None and queue[0].corners is not None:
-			backwards = True
-			forwards = True
-			loops = (len(queue) - 2) // 2
-		elif queue[-1].corners is not None:
-			backwards = True
-			forwards = False
-			loops = (len(queue) - 1)
-		elif queue[0].corners is not None:
-			backwards = False
-			forwards = True
-			loops = (len(queue) - 1)
 		else:
-			# throw error
-			print("Error: No corners found")
+			print(f"Frame {frame.n} has mask")
+		
+  		# Frame has corners
+		if prev_frame is None and frame.corners is not None:
+			# Only do backward optical flow from current frame to all qeued frames
+			print("BACKWARD")
+			for i in range(len(queue) - 1, -1, -1):
+				qframe = queue[i]
+				print(f"Updating corners for frame {qframe.n} from frame {frame.n}")
+				qframe.corners = updateCorners(qframe, frame)
+				frame = qframe
+		elif frame.corners is None:
+			print("FORWARD")
+			# Only do forward optical flow from previous frame to current frame
+			queue.appendleft(prev_frame)
+			for i in range(1, len(queue)):
+				qframe = queue[i]
+       
+				print(f"Updating corners for frame {qframe.n} from frame {prev_frame.n}")
+				updateCorners(qframe, prev_frame)
+				prev_frame = qframe
+		elif len(queue) > 1:
+			print("HALF")
+			# If both frames have corners then do half forward and half backward optical flow
+			queue.appendleft(prev_frame)
+			for i in range(1, len(queue)//2):
+				qframe = queue[i]
+				print(f"Updating corners for frame {qframe.n} from frame {prev_frame.n}")
+				updateCorners(qframe, prev_frame)
+				prev_frame = qframe
+
+			# For the rest do backward optical flow
+			next_frame = frame
+			for i in range(len(queue) - 1, len(queue) // 2 - 1, -1):
+				qframe = queue[i]
+				print(f"Updating corners for frame {qframe.n} from frame {next_frame.n}")
+				updateCorners(qframe, next_frame)
+				next_frame = qframe
+		else:
+			queue.appendleft(prev_frame)
    
-		# Update corners using forward & Backwards optical flow for all frames in queue
-		print(len(queue), forwards, backwards, loops)
-		for _ in range(loops):
-			if forwards:
-				updateCorners(queue[1], queue[0])
-				saveFrame(
-					diagram = diagram_empty.copy(),
-					frame = queue.popleft(),
-					output = output,
-					player_tracker = player_tracker,
-					referee_tracker = referee_tracker,
-					debug = show_process
-				)
-	
-			if backwards:
-				updateCorners(queue[-2], queue[-1])
-				backwardsQueue.append(queue.pop())
-   
-		print(len(queue), forwards, backwards)
-		# If there is an odd number of frames in the queue then update the middle frame
-		if len(queue) > 2 and len(queue) % 2 == 1:
-			if backwards:
-				updateCorners(queue[-2], queue[-1])
-				backwardsQueue.append(queue.pop())
-			else:
-				updateCorners(queue[1], queue[0])
-				saveFrame(
-					diagram = diagram_empty.copy(),
-					frame = queue.popleft(),
-					output = output,
-					player_tracker = player_tracker,
-					referee_tracker = referee_tracker,
-					debug = show_process
-				)
-  
-		if len(queue) >= 1 and backwards:
-			while queue:
-				backwardsQueue.append(queue.pop())
-		elif len(queue) == 2:
-			backwardsQueue.append(queue.popleft())
-   
-		# Run through backwards to save frames in correct order
-		for _ in range(len(backwardsQueue)):
+		while len(queue) > 0:
 			saveFrame(
 				diagram = diagram_empty.copy(),
-				frame = backwardsQueue.pop(),
+				frame = queue.popleft(),
 				output = output,
-				player_tracker = player_tracker,
-				referee_tracker = referee_tracker,
-				debug = show_process
+				debug = show_process,
 			)
+
+		prev_frame = frame
    
 	print(f"\nFPS: {i/total_time:.2f} Hz")
 	cv2.destroyAllWindows()
@@ -212,3 +196,4 @@ if __name__ == "__main__":
 	
 	# Print time taken to run
 	print(f"Time taken: {perf_counter()-start:.2f} s")
+ 
