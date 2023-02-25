@@ -300,6 +300,12 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
  	# Draw white square in top left corner for text
 	cv2.rectangle(frame.img, (0, 0), (200, 70), (255, 255, 255), -1)
 
+	# Add corner age to display frame
+	cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+	# Add frame number to display frame
+	cv2.putText(frame.img, f"Frame: {frame.n}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+ 
 	# Get the homography for the current frame
 	diagram = frame.applyHomography(diagram)
 
@@ -316,11 +322,6 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
 	# Convert frame to BGR for writing to video
 	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
 
-	# Add corner age to display frame
-	cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-
-	# Add frame number to display frame
-	cv2.putText(frame.img, f"Frame: {frame.n}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
 	# Write the frame to the output video
 	output.write(frame.img)
