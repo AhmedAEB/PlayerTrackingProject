@@ -135,6 +135,7 @@ dmypy.json
 # Training data and Weight files
 data
 weights
+runs
 
 # Mac OS
 .DS_Store
