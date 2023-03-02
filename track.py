@@ -1,179 +1,108 @@
-import argparse
-from os import path
-from time import perf_counter
-from tqdm import trange
+from ultralytics import YOLO
+from utils.basketballPredictor import BasketballPredictor
 
+import tqdm
 import cv2
+import torch
+import argparse
 import numpy as np
-from collections import deque
+from time import perf_counter
 
-from tools.deepsort import DeepSortWrapper
-from tools.yolov7 import Yolov7Wrapper
-from tools.yolov7_seg import Yolov7SegWrapper
-from tools.frame import Frame, updateCorners, saveFrame
+from utils.court import convertMaskToPolygon, getCornerPoints
 
-def displayQ(queue):
-	return [str(frame.n) for frame in queue]
+COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
 
 def run(opt):
-	# Debugging Arguments
-	show_process, nframes, skip_frames = opt.show_process, opt.nframes, opt.skip_frames
-	
 	# Get arguments
-	source, save_path, yolo_weights, yolo_seg_weights, deepsort_weights, device = path.abspath(opt.source), path.abspath(opt.save_path), opt.yolo_weights, opt.yolo_seg_weights, opt.deepsort_weights, opt.device
-	
-	# Get hyperparameters
-	max_cos_dist, nn_budget, iou_th, conf_th, iou_th_seg, conf_th_seg, max_track_age, init_phase_frames = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.iou_th_seg, opt.conf_th_seg, opt.max_track_age, opt.init_phase_frames
+	source, show_process, fast, skip_frames = opt.source, opt.show_process, opt.fast, opt.skip_frames
 
-	# Initialise YOLOv7 wrapper for player and referee detection
-	yolov7 = Yolov7Wrapper(device, yolo_weights, iou_th=iou_th, conf_th=conf_th)
-
-	# initialize DeepSORT trackers for each players and referee
-	player_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="player")
-	referee_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="referee")
-
-	# Initialise YoloV7 Instance Segmentation wrapper for court detection
-	yolov7_seg = Yolov7SegWrapper(device, yolo_seg_weights, iou_th=iou_th_seg, conf_th=conf_th_seg)
-
-	# Get the video from the source
+	# Find total number of frames in video
 	video = cv2.VideoCapture(source)
+ 
+	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT)) - skip_frames
+ 
+	if total_frames < 0:
+		raise ValueError("Video has no frames or skip_frames is too large!")
+
+	video.release()
+
+	print("🏀 - Loading Yolo Models...")
+	if fast:
+		 model = YOLO("./weights/FirstYoloV8.pt")
+	else:
+		model = YOLO("./weights/NinthYolo_x-nracheckpoint3.pt")
 	
-	# Extract the video w, h and fps
-	w, h = int(video.get(cv2.CAP_PROP_FRAME_WIDTH)), int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-	fps = int(video.get(cv2.CAP_PROP_FPS))
- 
-	# Define the codec and create VideoWriter object
-	codec = cv2.VideoWriter_fourcc(*"avc1")
-	output = cv2.VideoWriter(save_path, codec, fps, (w, h))
+	segModel = YOLO("./weights/SecondSeg.pt")
 
-	# Initialise variables for tracking
-	total_time = 0
- 
-	# Queue for storing previous frames for optical flow
-	queue = deque()
- 
-	# Get first frame from video by using skip_frames
-	for _ in range(skip_frames+1):
-		ret, orig = video.read()
-  
-		# Check if video has ended
-		if not ret:
-			break
-
-	# Get total number of frames
-	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT)) if nframes is None else nframes
- 
-	total_frames -= skip_frames if total_frames > skip_frames else 0
-
-	prev_frame = None
- 
-	# Read diagram image
-	diagram_empty = cv2.imread('diagram.jpg')
-
-	# Loop through all frames
-	for i in trange(total_frames, desc="Processing..."):
-		# Start timer for current frame
-		start = perf_counter()
-  
-		# Check if video has ended
-		if not ret:
-			break
-
-		frame = Frame(orig, i, w, h)
-  
-		# Get next frame from video
-		ret, orig = video.read()
-	
-		# Convert frame to RGB
-		frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
-  
-		# Run court segmentation to find free throw area
-		frame.detectMask(yolov7_seg)
-  
-		# Run player and referee detection + tracking (yolov7 + deepsort)
-		frame.detectAndTrack(yolov7, [player_tracker, referee_tracker])
-					
-		# Update the time taken and increment frame count
-		total_time += perf_counter() - start
-		i += 1
-  
-		# If mask is None then there is no free throw area so append frame to queue
-		if frame.n == total_frames - 1:
-			queue.append(frame)
-		elif frame.mask is None:
-			queue.append(frame)
-			continue
-		
-  		# Frame has corners
-		if prev_frame is None and frame.corners is not None:
-			# Only do backward optical flow from current frame to all qeued frames
-			next_frame = frame
-			for i in range(len(queue) - 1, -1, -1):
-				qframe = queue[i]
-				updateCorners(qframe, next_frame)
-				next_frame = qframe
-		elif frame.corners is None:
-			# Only do forward optical flow from previous frame to current frame
-			queue.appendleft(prev_frame)
-			for i in range(1, len(queue)):
-				qframe = queue[i]
-				updateCorners(qframe, prev_frame)
-				prev_frame = qframe
-		elif len(queue) > 0:
-			# If both frames have corners then do half forward and half backward optical flow
-			queue.appendleft(prev_frame)
-			for i in range(1, len(queue)//2):
-				qframe = queue[i]
-				updateCorners(qframe, prev_frame)
-				prev_frame = qframe
-
-			# For the rest do backward optical flow
-			next_frame = frame
-			for i in range(len(queue) - 1, len(queue) // 2 - 1, -1):
-				qframe = queue[i]
-				updateCorners(qframe, next_frame)
-				next_frame = qframe
-		else:
-			queue.appendleft(prev_frame)
-   
-		while len(queue) > 0:
-			saveFrame(
-				diagram = diagram_empty.copy(),
-				frame = queue.popleft(),
-				output = output,
-				debug = show_process,
+	def on_predict_postprocess_end(predictor):
+		if predictor.args.task == "detect":
+			results = segModel.predict(
+				source = predictor.results[0].orig_img,
+				show = show_process,
+				verbose = False,
+				box = False,
+				retina_masks = True,
 			)
 
-		prev_frame = frame
+			# Display mask as a binary image
+			binary = results[0].masks.masks.permute(1, 2, 0).numpy()
+			binary = cv2.threshold(binary, 0, 255, cv2.THRESH_BINARY)[1]
    
-	print(f"\nFPS: {i/total_time:.2f} Hz")
-	cv2.destroyAllWindows()
-	video.release() # Release video
+			# Calculate the area covered by the mask
+			mask_area = np.sum(binary == 255) / (binary.shape[0] * binary.shape[1])
+
+			# If the area is too small or the mask is too close to the top/bottom of the image (by 2.5%), then ignore it
+			if mask_area < 0.01 or binary[:binary.shape[0]//20, :].any() or binary[-binary.shape[0]//20:, :].any():
+				predictor.results[0].corners, predictor.results[0].diagram_corners = None, None
+			# Otherwise use the mask to find the corners
+			else:
+				# Convert the mask to a polygon with straight edges
+				polygon = convertMaskToPolygon(binary.astype(np.uint8))
+	
+				# Extract corner points from polygon (4 points, 2 points or None)
+				predictor.results[0].corners, predictor.results[0].diagram_corners = getCornerPoints(polygon)
+	
+				for i, corner in enumerate(predictor.results[0].corners):
+					cv2.circle(predictor.results[0].orig_img, corner.astype(int), 5, COLORS[i], -1)
+   
+				if show_process:
+					# Write mask area on binary image
+					cv2.putText(binary, f"Mask area: {mask_area*100:.2f}%", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+		
+					# Draw a white line at the top and bottom of the binary image
+					cv2.line(binary, (0, binary.shape[0]//20), (binary.shape[1], binary.shape[0]//20), (255, 255, 255), 2)
+					cv2.line(binary, (0, binary.shape[0] - binary.shape[0]//20), (binary.shape[1], binary.shape[0] - binary.shape[0]//20), (255, 255, 255), 2)
+		
+					# Display the image
+					cv2.imshow("Binary", binary)
+					cv2.imshow("Polygon", polygon)
+	
+			progress_bar.update(1)
+
+	progress_bar = tqdm.tqdm(total = total_frames, desc = "🏀 - Processing...")
+
+	model.add_callback("on_predict_postprocess_end", on_predict_postprocess_end)
+	model.predictor = BasketballPredictor(skip_frames=skip_frames)
+	for result in model.track(
+		source = source,
+		show = show_process,
+		save = True,
+		conf = 0.1,
+		iou = 0.9,
+		tracker = "botsort_custom.yaml",
+		line_thickness = 2,
+		max_det = 15, # For basketball, there is max 10 players on the court at a time, 3 refs, so 20 is a good number
+		verbose = False,
+	):
+		print(result.corners)
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--source", type=str, default="./data/input.mp4", help="Path to a basketball video")
-	parser.add_argument("--save_path", type=str, default="./data/output.mp4", help="Path to save the output video to")
-	parser.add_argument("--yolo_weights", type=str, default="./weights/cleanedDatasetWeights.pt", help="Path to the YOLO weights file (.pt)")
-	parser.add_argument("--yolo_seg_weights", type=str, default="./weights/freethrow.pt", help="Path to the YOLO segmentation weights file (.pt)")
-	parser.add_argument("--deepsort_weights", type=str, default="./weights/market1501.pb", help="Path to the DeepSORT weights file (.pb)")
-	parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-	parser.add_argument("--show_process", action="store_true", help="Show the intermediate frames (for debugging)")
-	parser.add_argument("--nframes", type=int, default=None, help="Number of frames to process (for debugging)")
-	parser.add_argument("--skip_frames", type=int, default=0, help="Number of frames to skip (for debugging)")
+	parser.add_argument("--source", type=str, default="./data/alitest.mp4", help="Path to a basketball video")
+	parser.add_argument("--show_process", action="store_true", help="Show the process of the tracking, including court detection.") 
+	parser.add_argument("--fast", action="store_true", help="Run tracking at a faster speed, but with less accuracy.")
+	parser.add_argument("--skip_frames", type=int, default=0, help="Skip the first n frames of the video.")
  
-	# Hyperparameters #TODO: Review the help strings
-	parser.add_argument("--max_cos_dist", type=float, default=0.4, help="Maximum cosine distance for a track to be considered a match")
-	parser.add_argument("--nn_budget", type=int, default=None, help="Maximum number of tracks to keep in the tracker")
-	parser.add_argument("--iou_th", type=float, default=0.2, help="IOU threshold for non-max suppression")
-	parser.add_argument("--conf_th", type=float, default=0.2, help="Confidence threshold for non-max suppression")
-	parser.add_argument("--max_track_age", type=int, default=300, help="Maximum number of frames to keep a track alive")
-	parser.add_argument("--init_phase_frames", type=int, default=6, help="Number of frames a track is initialised for")
- 
-	# YOLOv7 Segmentation Hyperparameters
-	parser.add_argument("--conf_th_seg", type=float, default=0.5, help="Confidence threshold for segmentation")
-	parser.add_argument("--iou_th_seg", type=float, default=0.5, help="IOU threshold for segmentation")
-	
 	opt = parser.parse_args()
 	print(opt)
 	
@@ -185,4 +114,3 @@ if __name__ == "__main__":
 	
 	# Print time taken to run
 	print(f"Time taken: {perf_counter()-start:.2f} s")
- 
