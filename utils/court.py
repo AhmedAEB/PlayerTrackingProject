@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 
 def convertMaskToPolygon(mask):
+	print(mask.dtype)
 	# Find contours
 	contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 	
@@ -74,50 +75,3 @@ def getCornerPoints(polygon):
 
 	return corners, diagram_corners
 
-def calcCameraMovement(updateFrame, refFrame):
-	# Make a copy of the curr and next frames
-	updateFrame_img = updateFrame.copy()
-	refFrame_img = refFrame.copy()
- 
-	# Apply canny edge detection to the curr and next frames
-	updateFrame_img = cv2.Canny(updateFrame_img, 100, 200)
-	refFrame_img = cv2.Canny(refFrame_img, 100, 200)
- 
-	# Calculate optical flow
-	flow = cv2.calcOpticalFlowFarneback(refFrame_img, updateFrame_img, None, 0.5, 10, 30, 3, 5, 1.5, 0)
- 
-	# Create a flow frame to display the flow vectors
-	flow_frame = updateFrame.copy()
- 
-	# Reset flow vectors in range miny to maxy
-	flow[miny:maxy, :, :] = 0
- 
-	# Reset top & bottom 15% of flow vectors
-	flow[:int(flow.shape[0] * 0.15), :, :] = 0
-	flow[int(flow.shape[0] * 0.85):, :, :] = 0
- 
-	# Calculate the average x and y movement ignoring vectors with magnitude less than 1
-	avg_movement = np.array([0, 0], dtype=np.float32)
-	count = 0
-	
-	# Loop through each pixel in the flow
-	for y in range(0, flow.shape[0], 10):
-		for x in range(0, flow.shape[1], 10):
-			# Get the flow vector
-			fx, fy = flow[y, x]
- 
-			# If the magnitude of the flow vector is greater than 1, add it to the average movement
-			if np.sqrt(fx ** 2 + fy ** 2) > 1.5:
-				avg_movement += np.array([fx, fy], dtype=np.float32)
-				count += 1
- 
-			# Draw the flow vector in red if moving right, blue if moving left
-			if fx > 0:
-				cv2.line(flow_frame, (x, y), (x + int(fx), y + int(fy)), (0, 0, 255), 1)
-			else:
-				cv2.line(flow_frame, (x, y), (x + int(fx), y + int(fy)), (255, 0, 0), 1)
-
-	# Divide the average movement by the number of vectors to get the average movement
-	avg_movement /= count
-	
-	return avg_movement
