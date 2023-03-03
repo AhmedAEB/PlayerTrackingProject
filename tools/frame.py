@@ -7,6 +7,8 @@ from tools.deepsort import DeepSortWrapper
 from tools.yolov7 import Yolov7Wrapper
 from tools.yolov7_seg import Yolov7SegWrapper
 
+from ultralytics import YOLO
+
 from matplotlib import pyplot as plt
 
 COLORS = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0), (255, 0, 255), (0, 255, 255), (255, 255, 255), (0, 0, 0)]
@@ -35,15 +37,20 @@ class Frame():
 		self.polygon = None
 		self.flow_frame = None
   
-	def detectAndTrack(self, yoloWrapper: Yolov7Wrapper, trackers: List[DeepSortWrapper]):
+	def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSortWrapper]):
 		# Use YOLO to detect players and referees
-		detections = yoloWrapper.detect(self.img, draw_bboxes=False)
+		# detections = yoloWrapper.detect(self.img, draw_bboxes=False)
+		results = yoloWrapper(
+      		source = self.img,
+        	verbose = False
+        )
+		detections = results[0].boxes.numpy()
 		
 		if detections is None:
 			bboxes, scores, classes = [], [], []
 		else:
 			# Split detections into bboxes, scores and classes
-			bboxes, scores, classes = np.hsplit(detections, [4, 5])
+			bboxes, scores, classes = detections.xyxy, detections.conf, detections.cls
 
 			# Convert bboxes to deepsort format
 			bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
@@ -205,9 +212,9 @@ class Frame():
 		if self.polygon is not None:
 			cv2.imshow("Polygon", self.polygon)
    
-		# Display the frame in BGR
-		img = cv2.cvtColor(self.img, cv2.COLOR_RGB2BGR)
-		cv2.imshow("Frame", img)
+		# Display the frame
+		# img = cv2.cvtColor(self.img, cv2.COLOR_RGB2BGR)
+		cv2.imshow("Frame", self.img)
   
 		if cv2.waitKey(1):
 			return
@@ -291,7 +298,7 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 		cv2.circle(Frame1.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
 	
 	# Convert flow frame to BGR for display
-	Frame1.flow_frame = cv2.cvtColor(Frame1.flow_frame, cv2.COLOR_RGB2BGR)
+	# Frame1.flow_frame = cv2.cvtColor(Frame1.flow_frame, cv2.COLOR_RGB2BGR)
 
 def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug: bool = False):
 	# assert that the frame has 4 corners and the diagram has 4 corners
@@ -314,7 +321,7 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
 		frame.displayAll(debug = True)
   
 	# Convert frame to BGR for writing to video
-	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
+	# frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
 
 	# Add corner age to display frame
 	cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
