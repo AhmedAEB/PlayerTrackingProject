@@ -9,6 +9,7 @@ class BasketballResults(Results):
 		super().__init__(*args, **kwargs)
 		self.corners = None
 		self.diagram_corners = None
+		self.prev_result = None
 
 class BasketballPredictor(DetectionPredictor):
 	def __init__(self, cfg=DEFAULT_CFG, overrides=None, skip_frames=0):
@@ -28,8 +29,8 @@ class BasketballPredictor(DetectionPredictor):
 											 stride=self.model.stride,
 											 auto=self.model.pt)
   
-		## CUSTOM CODE
-		print(f"🐞 - Dataset size: {self.dataset.nf}")
+		#* CUSTOM CODE
+  
 		# Skip frames
 		for batch in self.dataset:
 			if self.skip_frames > 0:
@@ -37,7 +38,8 @@ class BasketballPredictor(DetectionPredictor):
 				continue
 			else:
 				break
-		## END OF CUSTOM CODE
+
+		#* END OF CUSTOM CODE
 
 		self.source_type = self.dataset.source_type
 		self.vid_path, self.vid_writer = [None] * self.dataset.bs, [None] * self.dataset.bs
