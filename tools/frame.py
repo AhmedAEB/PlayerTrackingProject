@@ -11,7 +11,7 @@ from ultralytics import YOLO
 
 from matplotlib import pyplot as plt
 
-COLORS = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0), (255, 0, 255), (0, 255, 255), (255, 255, 255), (0, 0, 0)]
+COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
 
 class Frame():
 	def __init__(self, img, n, w, h):
@@ -41,9 +41,9 @@ class Frame():
 		# Use YOLO to detect players and referees
 		# detections = yoloWrapper.detect(self.img, draw_bboxes=False)
 		results = yoloWrapper(
-      		source = self.img,
-        	verbose = False
-        )
+			  source = self.img,
+			verbose = False
+		)
 		detections = results[0].boxes.numpy()
 		
 		if detections is None:
@@ -79,28 +79,46 @@ class Frame():
 				self.miny = min(self.miny, miny)
 				self.maxy = max(self.maxy, maxy)
 	
-	def detectMask(self, yoloWrapper: Yolov7SegWrapper):
+	def detectMask(self, yoloWrapper: YOLO):
 		# Use yolo to detect the free throw area
-		self.mask = yoloWrapper.detect(self.img)
+		# self.mask = yoloWrapper.detect(self.img)
+		results = yoloWrapper(
+			source = self.img,
+			retina_masks = True,
+			verbose = False
+		)
   
+		if results[0].masks is None:
+			self.mask = None
+			return
+		
+		self.mask = results[0].masks.masks[0].numpy().astype(np.uint8)
+  
+		# Scale the mask to the size of the image
+		# self.mask = cv2.resize(self.mask, (self.w, self.h))
+
 		# Convert the mask to a binary image
-		self.mask = cv2.cvtColor(self.mask, cv2.COLOR_BGR2GRAY)
-		self.mask = cv2.threshold(self.mask, 0, 255, cv2.THRESH_BINARY)[1]
+		# self.mask = cv2.cvtColor(self.mask, cv2.COLOR_BGR2GRAY)
+		# self.mask = cv2.threshold(self.mask, 0, 255, cv2.THRESH_BINARY)[1]
+		
+		# Change 1 to 255 for display purposes
+		self.mask = self.mask * 255
   
 		# Calculate the percentage area of the detected mask (white pixels)
 		mask_area = np.sum(self.mask == 255) / (self.w * self.h)
 		
-		# If the mask is too small, or is within 1% of the image right or left, remove it
-		if mask_area < 0.025 or self.mask[:, :self.w//100].any() or self.mask[:, -self.w//100:].any():
+		# If the mask is too small, or is within 1% of the image top or bottom, remove it
+		if mask_area < 0.025 or self.mask[:self.w//100, :].any() or self.mask[-self.w//100:, :].any():
 			self.mask = None
-		else:
-			# Convert the mask to a polygon
-			self.convertMaskToPolygon()
-   
-			# Get the corner points of the polygon
-			self.getCornerPoints()
-   
-			self.corners_age = 0
+			return
+		
+		# Convert the mask to a polygon
+		self.convertMaskToPolygon()
+
+		# Get the corner points of the polygon
+		self.getCornerPoints()
+
+		self.corners_age = 0
 
 	def convertMaskToPolygon(self):
 		# Find contours
@@ -304,7 +322,7 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
 	# assert that the frame has 4 corners and the diagram has 4 corners
 	assert len(frame.corners) == 4 and len(frame.diagram_corners) == 4
 	
- 	# Draw white square in top left corner for text
+	 # Draw white square in top left corner for text
 	cv2.rectangle(frame.img, (0, 0), (200, 70), (255, 255, 255), -1)
 
 	# Get the homography for the current frame
