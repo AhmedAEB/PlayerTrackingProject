@@ -3,10 +3,7 @@ from typing import List
 import cv2
 import numpy as np
 
-from tools.deepsort import DeepSortWrapper
-from tools.yolov7 import Yolov7Wrapper
-from tools.yolov7_seg import Yolov7SegWrapper
-
+from tools.deepsort import DeepSort
 from ultralytics import YOLO
 
 from matplotlib import pyplot as plt
@@ -37,11 +34,10 @@ class Frame():
 		self.polygon = None
 		self.flow_frame = None
   
-	def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSortWrapper]):
+	def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
 		# Use YOLO to detect players and referees
-		# detections = yoloWrapper.detect(self.img, draw_bboxes=False)
 		results = yoloWrapper(
-			  source = self.img,
+			source = self.img,
 			verbose = False
 		)
 		detections = results[0].boxes.numpy()
@@ -81,7 +77,6 @@ class Frame():
 	
 	def detectMask(self, yoloWrapper: YOLO):
 		# Use yolo to detect the free throw area
-		# self.mask = yoloWrapper.detect(self.img)
 		results = yoloWrapper(
 			source = self.img,
 			retina_masks = True,
@@ -93,13 +88,6 @@ class Frame():
 			return
 		
 		self.mask = results[0].masks.masks[0].numpy().astype(np.uint8)
-  
-		# Scale the mask to the size of the image
-		# self.mask = cv2.resize(self.mask, (self.w, self.h))
-
-		# Convert the mask to a binary image
-		# self.mask = cv2.cvtColor(self.mask, cv2.COLOR_BGR2GRAY)
-		# self.mask = cv2.threshold(self.mask, 0, 255, cv2.THRESH_BINARY)[1]
 		
 		# Change 1 to 255 for display purposes
 		self.mask = self.mask * 255
@@ -109,6 +97,11 @@ class Frame():
 		
 		# If the mask is too small, or is within 1% of the image top or bottom, remove it
 		if mask_area < 0.025 or self.mask[:self.w//100, :].any() or self.mask[-self.w//100:, :].any():
+			self.mask = None
+			return
+
+		# TODO: CHANGE THIS TO DO SOMETHING ELSE, (instead of just removing the mask, maybe try to find the corners)
+		if self.mask[:, :self.w//100].any() or self.mask[:, -self.w//100:].any():
 			self.mask = None
 			return
 		
@@ -214,10 +207,7 @@ class Frame():
    
 		return diagram
   
-	def displayAll(self, debug: bool = False):
-		if not debug:
-			return
-	 
+	def displayAll(self):
 		# Display the optical flow frame
 		if self.flow_frame is not None:
 			cv2.imshow("Optical Flow", self.flow_frame)
@@ -231,7 +221,6 @@ class Frame():
 			cv2.imshow("Polygon", self.polygon)
    
 		# Display the frame
-		# img = cv2.cvtColor(self.img, cv2.COLOR_RGB2BGR)
 		cv2.imshow("Frame", self.img)
   
 		if cv2.waitKey(1):
@@ -314,15 +303,12 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 			continue # Skip the corner if it is not within the frame
 		cv2.circle(Frame1.flow_frame, tuple(corner.astype(int)), 5, COLORS[i], -1)
 		cv2.circle(Frame1.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
-	
-	# Convert flow frame to BGR for display
-	# Frame1.flow_frame = cv2.cvtColor(Frame1.flow_frame, cv2.COLOR_RGB2BGR)
 
 def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug: bool = False):
 	# assert that the frame has 4 corners and the diagram has 4 corners
 	assert len(frame.corners) == 4 and len(frame.diagram_corners) == 4
 	
-	 # Draw white square in top left corner for text
+	# Draw white square in top left corner for text
 	cv2.rectangle(frame.img, (0, 0), (200, 70), (255, 255, 255), -1)
 
 	# Get the homography for the current frame
@@ -334,18 +320,15 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
 	# Add the diagram to the top right corner of the frame
 	frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
 
-	# Display frame and debug frames
-	if debug:
-		frame.displayAll(debug = True)
-  
-	# Convert frame to BGR for writing to video
-	# frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
-
 	# Add corner age to display frame
 	cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
 	# Add frame number to display frame
 	cv2.putText(frame.img, f"Frame: {frame.n}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+	# Display frame and debug frames
+	if debug:
+		frame.displayAll()
 
 	# Write the frame to the output video
 	output.write(frame.img)

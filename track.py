@@ -7,9 +7,7 @@ import cv2
 import numpy as np
 from collections import deque
 
-from tools.deepsort import DeepSortWrapper
-from tools.yolov7 import Yolov7Wrapper
-from tools.yolov7_seg import Yolov7SegWrapper
+from tools.deepsort import DeepSort
 from tools.frame import Frame, updateCorners, saveFrame
 
 from ultralytics import YOLO
@@ -28,15 +26,13 @@ def run(opt):
 	max_cos_dist, nn_budget, iou_th, conf_th, iou_th_seg, conf_th_seg, max_track_age, init_phase_frames = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.iou_th_seg, opt.conf_th_seg, opt.max_track_age, opt.init_phase_frames
 
 	# Initialise YOLO wrapper for player and referee detection
-	# yolov7 = Yolov7Wrapper(device, yolo_weights, iou_th=iou_th, conf_th=conf_th)
 	yolov8 = YOLO(yolo_weights)
 
 	# initialize DeepSORT trackers for each players and referee
-	player_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="player")
-	referee_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="referee")
+	player_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="player")
+	referee_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="referee")
 
 	# Initialise YoloV7 Instance Segmentation wrapper for court detection
-	# yolov7_seg = Yolov7SegWrapper(device, yolo_seg_weights, iou_th=iou_th_seg, conf_th=conf_th_seg)
 	yolov8_seg = YOLO(yolo_seg_weights)
 
 	# Get the video from the source
@@ -87,9 +83,6 @@ def run(opt):
   
 		# Get next frame from video
 		ret, orig = video.read()
-	
-		# Convert frame to RGB
-		# frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
   
 		# Run court segmentation to find free throw area
 		frame.detectMask(yolov8_seg)
