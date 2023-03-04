@@ -97,7 +97,7 @@ def run(opt):
 		# If mask is None then there is no free throw area so append frame to queue
 		if frame.n == total_frames - 1:
 			queue.append(frame)
-		elif frame.mask is None:
+		elif len(frame.corners) != 4:
 			queue.append(frame)
 			continue
 		

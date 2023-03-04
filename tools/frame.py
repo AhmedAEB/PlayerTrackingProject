@@ -16,7 +16,7 @@ class Frame():
 		self.n = n# frame number for debugging
 		self.w, self.h = w, h
   
-		self.corners = None
+		self.corners = []
 		self.diagram_corners = None
 		self.corners_age = 1e+5
 		self.mask = None
@@ -99,11 +99,6 @@ class Frame():
 		if mask_area < 0.025 or self.mask[:self.w//100, :].any() or self.mask[-self.w//100:, :].any():
 			self.mask = None
 			return
-
-		# TODO: CHANGE THIS TO DO SOMETHING ELSE, (instead of just removing the mask, maybe try to find the corners)
-		if self.mask[:, :self.w//100].any() or self.mask[:, -self.w//100:].any():
-			self.mask = None
-			return
 		
 		# Convert the mask to a polygon
 		self.convertMaskToPolygon()
@@ -131,9 +126,33 @@ class Frame():
 		cv2.drawContours(self.polygon, [polygon], 0, 255, -1)
 
 	def getCornerPoints(self):
+		# TODO: CHANGE THIS TO DO SOMETHING ELSE, (instead of just removing the mask, maybe try to find the corners)
+		# Polygon is too close to the left side of the image
+		if self.polygon[:, :self.w//50].any():
+			# Loop from right to left until a non-zero pixel is found
+			for i in range(self.polygon.shape[1] - 1, -1, -1):
+				# Check if the column contains any white pixels
+				if self.polygon[:, i].any():
+					# Remove the polygon and return
+					self.corners.append((i, np.argmax(self.polygon[:, i])))
+					self.side = "left"
+					return
+			
+
+		elif self.polygon[:, -self.w//50:].any():
+			# Loop from left to right until a non-zero pixel is found
+			for i in range(self.polygon.shape[1]):
+				# Check if the column contains any white pixels
+				if self.polygon[:, i].any():
+					# Remove the polygon and return
+					self.corners.append((i, np.argmax(self.polygon[:, i])))
+					self.side = "right"
+					print("right")
+					return
+			
+	 
 		# Run a line in each direction along the polygon and 
 		# record the coordinates of the first non-zero pixels
-		self.corners = []
 		for i in range(self.polygon.shape[0]):
 			# Check if the row contains any white pixels
 			if self.polygon[i, :].any():
@@ -227,6 +246,16 @@ class Frame():
 			return
 
 def updateCorners(Frame1: Frame, Frame2: Frame):
+	if len(Frame1.corners) == 1:
+		if Frame1.side == "left":
+			# Compare the top right corner of Frame2 (frame [1]) with the corner of Frame1
+			movement = Frame2.corners[1] - Frame1.corners[0]
+			Frame1.corners = Frame2.corners.copy()
+			for i in range(len(Frame1.corners)):
+				Frame1.corners[i] += movement
+		else:
+			print(Frame1.corners, Frame2.corners)
+			
 	frame1_img = Frame1.img.copy()
 	frame2_img = Frame2.img.copy()
  
