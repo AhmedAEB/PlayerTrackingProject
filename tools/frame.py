@@ -326,14 +326,6 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
 	# Add the diagram to the top right corner of the frame
 	frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
 
-
-	# Display frame and debug frames
-	if debug:
-		frame.displayAll(debug = True)
-  
-	# Convert frame to BGR for writing to video
-	frame.img = cv2.cvtColor(frame.img, cv2.COLOR_RGB2BGR)
-
 	# Add corner age to display frame
 	cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
