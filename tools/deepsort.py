@@ -8,9 +8,9 @@ from deepsort.deep_sort.track import Track
 from deepsort.deep_sort.tracker import Tracker
 
 # Use yolov7.utils.plots to draw bboxes
-from yolov7.utils.plots import plot_one_box
+from tools.plot import plot_one_box
 
-class DeepSortWrapper():
+class DeepSort():
 	def __init__(self, deepsort_weights, cosine_thresh, nn_budget, max_track_age, init_phase_frames, class_name):
 		self.encoder = create_box_encoder(deepsort_weights, batch_size=1)
 		self.tracker = Tracker(NearestNeighborDistanceMetric("euclidean", cosine_thresh, nn_budget), max_age=max_track_age, n_init=init_phase_frames)

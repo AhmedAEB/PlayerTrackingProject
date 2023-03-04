@@ -7,10 +7,10 @@ import cv2
 import numpy as np
 from collections import deque
 
-from tools.deepsort import DeepSortWrapper
-from tools.yolov7 import Yolov7Wrapper
-from tools.yolov7_seg import Yolov7SegWrapper
+from tools.deepsort import DeepSort
 from tools.frame import Frame, updateCorners, saveFrame
+
+from ultralytics import YOLO
 
 def displayQ(queue):
 	return [str(frame.n) for frame in queue]
@@ -25,15 +25,15 @@ def run(opt):
 	# Get hyperparameters
 	max_cos_dist, nn_budget, iou_th, conf_th, iou_th_seg, conf_th_seg, max_track_age, init_phase_frames = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.iou_th_seg, opt.conf_th_seg, opt.max_track_age, opt.init_phase_frames
 
-	# Initialise YOLOv7 wrapper for player and referee detection
-	yolov7 = Yolov7Wrapper(device, yolo_weights, iou_th=iou_th, conf_th=conf_th)
+	# Initialise YOLO wrapper for player and referee detection
+	yolov8 = YOLO(yolo_weights)
 
 	# initialize DeepSORT trackers for each players and referee
-	player_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="player")
-	referee_tracker = DeepSortWrapper(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="referee")
+	player_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="player")
+	referee_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="referee")
 
 	# Initialise YoloV7 Instance Segmentation wrapper for court detection
-	yolov7_seg = Yolov7SegWrapper(device, yolo_seg_weights, iou_th=iou_th_seg, conf_th=conf_th_seg)
+	yolov8_seg = YOLO(yolo_seg_weights)
 
 	# Get the video from the source
 	video = cv2.VideoCapture(source)
@@ -83,15 +83,12 @@ def run(opt):
   
 		# Get next frame from video
 		ret, orig = video.read()
-	
-		# Convert frame to RGB
-		frame.img = cv2.cvtColor(frame.img, cv2.COLOR_BGR2RGB)
   
 		# Run court segmentation to find free throw area
-		frame.detectMask(yolov7_seg)
+		frame.detectMask(yolov8_seg)
   
 		# Run player and referee detection + tracking (yolov7 + deepsort)
-		frame.detectAndTrack(yolov7, [player_tracker, referee_tracker])
+		frame.detectAndTrack(yolov8, [player_tracker, referee_tracker])
 					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start
@@ -154,8 +151,8 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--source", type=str, default="./data/input.mp4", help="Path to a basketball video")
 	parser.add_argument("--save_path", type=str, default="./data/output.mp4", help="Path to save the output video to")
-	parser.add_argument("--yolo_weights", type=str, default="./weights/cleanedDatasetWeights.pt", help="Path to the YOLO weights file (.pt)")
-	parser.add_argument("--yolo_seg_weights", type=str, default="./weights/freethrow.pt", help="Path to the YOLO segmentation weights file (.pt)")
+	parser.add_argument("--yolo_weights", type=str, default="./weights/NinthYolo_x-nracheckpoint3.pt", help="Path to the YOLO weights file (.pt)")
+	parser.add_argument("--yolo_seg_weights", type=str, default="./weights/SecondSeg.pt", help="Path to the YOLO segmentation weights file (.pt)")
 	parser.add_argument("--deepsort_weights", type=str, default="./weights/market1501.pb", help="Path to the DeepSORT weights file (.pb)")
 	parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
 	parser.add_argument("--show_process", action="store_true", help="Show the intermediate frames (for debugging)")
