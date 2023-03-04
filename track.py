@@ -11,9 +11,21 @@ from tools.deepsort import DeepSort
 from tools.frame import Frame, updateCorners, saveFrame
 
 from ultralytics import YOLO
+from ultralytics.tracker.trackers.bot_sort import BOTSORT
+from ultralytics.yolo.utils import IterableSimpleNamespace
 
-def displayQ(queue):
-	return [str(frame.n) for frame in queue]
+BOTSORT_CFG = {
+    'tracker_type': 'botsort',
+    'track_high_thresh': 0.5,
+    'track_low_thresh': 0.1,
+    'new_track_thresh': 0.7,
+    'track_buffer': 60,
+    'match_thresh': 1,
+    'cmc_method': 'sparseOptFlow',
+    'proximity_thresh': 0.5,
+    'appearance_thresh': 0.25,
+    'with_reid': False
+}
 
 def run(opt):
 	# Debugging Arguments
@@ -28,9 +40,12 @@ def run(opt):
 	# Initialise YOLO wrapper for player and referee detection
 	yolov8 = YOLO(yolo_weights)
 
-	# initialize DeepSORT trackers for each players and referee
-	player_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="player")
-	referee_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="referee")
+	# Initialize BOTSORT tracker
+	cfg = IterableSimpleNamespace(**BOTSORT_CFG)
+	tracker = BOTSORT(
+    	args = cfg,
+     	frame_rate = 30
+    )
 
 	# Initialise YoloV7 Instance Segmentation wrapper for court detection
 	yolov8_seg = YOLO(yolo_seg_weights)
@@ -88,7 +103,7 @@ def run(opt):
 		frame.detectMask(yolov8_seg)
   
 		# Run player and referee detection + tracking (yolov7 + deepsort)
-		frame.detectAndTrack(yolov8, [player_tracker, referee_tracker])
+		frame.detectAndTrack(yolov8, tracker)
 					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start

@@ -1,14 +1,19 @@
 from typing import List
 
 import cv2
+import torch
 import numpy as np
 
 from tools.deepsort import DeepSort
 from ultralytics import YOLO
+from ultralytics.tracker.trackers.bot_sort import BOTSORT
 
 from matplotlib import pyplot as plt
 
-COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
+CORNER_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
+# Box Colours for each class (players - red, referees - grey)
+BOX_COLORS = [(255, 0, 0), (128, 128, 128)]
+BOX_NAMES = ["Pl", "Ref"]
 
 class Frame():
 	def __init__(self, img, n, w, h):
@@ -23,10 +28,7 @@ class Frame():
 		self.polygon = None
 		self.flow_frame = None
 
-		self.positions = [] # x, y
-		self.miny = h + 1
-		self.maxy = 0
-		self.colours = [] # r, g, b
+		self.boxes = None
   
 	def clearMemory(self):
 		# Remove all unnecessary variables to free up memory
@@ -34,46 +36,30 @@ class Frame():
 		self.polygon = None
 		self.flow_frame = None
   
-	def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
-		# Use YOLO to detect players and referees
+	def detectAndTrack(self, yoloWrapper: YOLO, tracker: BOTSORT):
 		results = yoloWrapper(
 			source = self.img,
 			verbose = False
 		)
-		detections = results[0].boxes.numpy()
+  
+		boxes = results[0].boxes.cpu().numpy()
+  
+		tracks = tracker.update(boxes, self.img)
 		
-		if detections is None:
-			bboxes, scores, classes = [], [], []
-		else:
-			# Split detections into bboxes, scores and classes
-			bboxes, scores, classes = detections.xyxy, detections.conf, detections.cls
-
-			# Convert bboxes to deepsort format
-			bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
-			
-			classes = classes.flatten().astype(int)
-			for i, tracker in enumerate(trackers):
-				# Get the detections for the current class
-				class_mask = classes == i
-				class_bboxes = bboxes[class_mask]
-				class_scores = scores[class_mask]
-				
-				# Update the tracker
-				tracker.update(self.img, class_bboxes, class_scores)
-	 
-				# Get the positions of the players and their colours
-				colours, positions = tracker.get_positions_c()
-	
-				# Check if there are any positions
-				if len(positions) > 0:
-					# Append the positions to the list of positions
-					self.positions.extend(positions)
-					self.colours.extend(colours)
-	 
-				# Update the min and max y values
-				miny, maxy = tracker.get_min_max_y()
-				self.miny = min(self.miny, miny)
-				self.maxy = max(self.maxy, maxy)
+		# Split tracks into bboxes, scores and classes
+		results[0].update(boxes=torch.as_tensor(tracks[:, :-1]))
+  
+		self.boxes = results[0].boxes.cpu().numpy()
+  
+		for box in self.boxes:
+			x1, y1, x2, y2 = box.xyxy[0].astype(int)
+	  
+			# Plot a box around the detected object based on the class	
+			cv2.rectangle(self.img, (x1, y1), (x2, y2), BOX_COLORS[int(box.cls[0])], 2)
+   
+			# Draw a rectangle above the box with the class and confidence
+			cv2.rectangle(self.img, (x1-1, y1-25), (x2+120, y1), BOX_COLORS[int(box.cls[0])], -1)
+			cv2.putText(self.img, f"{BOX_NAMES[int(box.cls[0])]},{int(box.id[0])}-{box.conf[0]:.2f}", (x1+5, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 1, cv2.LINE_AA)
 	
 	def detectMask(self, yoloWrapper: YOLO):
 		# Use yolo to detect the free throw area
@@ -183,7 +169,7 @@ class Frame():
   
 		# Display the corners on the image
 		for i, corner in enumerate(self.corners):
-			cv2.circle(self.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
+			cv2.circle(self.img, tuple(corner.astype(int)), 5, CORNER_COLORS[i], -1)
 
 	def applyHomography(self, diagram: np.ndarray):
 		# if corners or diagram corners are not set, return
@@ -193,17 +179,36 @@ class Frame():
 		# Get the transformation matrix
 		M = cv2.getPerspectiveTransform(self.corners, self.diagram_corners)
   
-		if len(self.positions) > 0:
-			# Use self.positions and self.colours to draw the positions on the diagram
-			positions = np.array(self.positions)[np.newaxis].astype(np.float32)
+		if self.boxes is not None:
+			# Use self.boxes and BOX_COLORS to draw boxes on the diagram
+			# Convert the boxes from xyxy to xy representing the bottom center of the box ~(feet of the player)
+			positions = []
+			for box in self.boxes:
+				x1, y1, x2, y2 = box.xyxy[0].astype(int)
+
+				# Get the center of the box
+				x = (x1 + x2) // 2
+
+				# Get the bottom of the box
+				y = y2
+	
+				positions.append((x, y))
+	
+			# Convert to numpy array
+			positions = np.array(positions)[np.newaxis].astype(np.float32)
+			
+			# Apply the homography
 			positions = cv2.perspectiveTransform(positions, M)
+
+			# Draw the positions on the diagram
 			for i, position in enumerate(positions[0]):
 				x, y = position.astype(int)
-				cv2.circle(diagram, (x, y), 15, self.colours[i], -1)
+				class_id = self.boxes[i].cls[0].astype(int)
+				cv2.circle(diagram, (x, y), 15, BOX_COLORS[class_id], -1)
 	
 		# Display corners on diagram
 		for i, corner in enumerate(self.diagram_corners):
-			cv2.circle(diagram, tuple(corner.astype(int)), 10, COLORS[i], -1)
+			cv2.circle(diagram, tuple(corner.astype(int)), 10, CORNER_COLORS[i], -1)
    
 		return diagram
   
@@ -229,16 +234,13 @@ class Frame():
 def updateCorners(Frame1: Frame, Frame2: Frame):
 	frame1_img = Frame1.img.copy()
 	frame2_img = Frame2.img.copy()
- 
-	miny = min(Frame1.miny, Frame2.miny)
-	maxy = max(Frame1.maxy, Frame2.maxy)
+	
+	# Find miny from frame 1 and frame 2
+	miny = min(np.min(Frame1.boxes.xyxy[:, 1]), np.min(Frame2.boxes.xyxy[:, 1]))
+	maxy = max(np.max(Frame1.boxes.xyxy[:, 3]), np.max(Frame2.boxes.xyxy[:, 3]))
 
 	# Add 3% to the miny and maxy
 	miny, maxy = int(miny * 0.97), int(maxy * 1.03)
- 
-	# for tracker in trackers:
-	# 	frame1_img = tracker.get_frame_wo_tracks(frame1_img)
-	# 	frame2_img = tracker.get_frame_wo_tracks(frame2_img)
  
 	# Apply canny edge detection to the curr and next frames
 	frame1_img = cv2.Canny(frame1_img, 100, 200)
@@ -301,8 +303,8 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 		# Check if the corner is within the frame
 		if corner[0] < 0 or corner[0] >= Frame1.img.shape[1] or corner[1] < 0 or corner[1] >= Frame1.img.shape[0]:
 			continue # Skip the corner if it is not within the frame
-		cv2.circle(Frame1.flow_frame, tuple(corner.astype(int)), 5, COLORS[i], -1)
-		cv2.circle(Frame1.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
+		cv2.circle(Frame1.flow_frame, tuple(corner.astype(int)), 5, CORNER_COLORS[i], -1)
+		cv2.circle(Frame1.img, tuple(corner.astype(int)), 5, CORNER_COLORS[i], -1)
 
 def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug: bool = False):
 	# assert that the frame has 4 corners and the diagram has 4 corners
