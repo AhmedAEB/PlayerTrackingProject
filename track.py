@@ -7,7 +7,6 @@ import cv2
 import numpy as np
 from collections import deque
 
-from tools.deepsort import DeepSort
 from tools.frame import Frame, updateCorners, saveFrame
 
 from ultralytics import YOLO

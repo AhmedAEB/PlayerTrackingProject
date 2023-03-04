@@ -3,8 +3,7 @@ from typing import List
 import cv2
 import torch
 import numpy as np
-
-from tools.deepsort import DeepSort
+xw
 from ultralytics import YOLO
 from ultralytics.tracker.trackers.bot_sort import BOTSORT
 
