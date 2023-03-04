@@ -102,14 +102,14 @@ def run(opt):
 			continue
 		
   		# Frame has corners
-		if prev_frame is None and frame.corners is not None:
+		if prev_frame is None and len(frame.corners) == 4:
 			# Only do backward optical flow from current frame to all qeued frames
 			next_frame = frame
 			for i in range(len(queue) - 1, -1, -1):
 				qframe = queue[i]
 				updateCorners(qframe, next_frame)
 				next_frame = qframe
-		elif frame.corners is None:
+		elif len(frame.corners) != 4:
 			# Only do forward optical flow from previous frame to current frame
 			queue.appendleft(prev_frame)
 			for i in range(1, len(queue)):
