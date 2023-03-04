@@ -126,7 +126,6 @@ class Frame():
 		cv2.drawContours(self.polygon, [polygon], 0, 255, -1)
 
 	def getCornerPoints(self):
-		# TODO: CHANGE THIS TO DO SOMETHING ELSE, (instead of just removing the mask, maybe try to find the corners)
 		# Polygon is too close to the left side of the image
 		if self.polygon[:, :self.w//50].any():
 			# Loop from right to left until a non-zero pixel is found
@@ -147,7 +146,6 @@ class Frame():
 					# Remove the polygon and return
 					self.corners.append((i, np.argmax(self.polygon[:, i])))
 					self.side = "right"
-					print("right")
 					return
 			
 	 
@@ -252,9 +250,17 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 			movement = Frame2.corners[1] - Frame1.corners[0]
 			Frame1.corners = Frame2.corners.copy()
 			for i in range(len(Frame1.corners)):
-				Frame1.corners[i] += movement
+				Frame1.corners[i] -= movement
 		else:
-			print(Frame1.corners, Frame2.corners)
+			# Compare the top left corner of Frame2 (frame [0]) with the corner of Frame1
+			movement = Frame2.corners[0] - Frame1.corners[0]
+			Frame1.corners = Frame2.corners.copy()
+			for i in range(len(Frame1.corners)):
+				Frame1.corners[i] -= movement
+		Frame1.diagram_corners = Frame2.diagram_corners.copy()
+		
+		plotCorners(Frame1)
+		return
 			
 	frame1_img = Frame1.img.copy()
 	frame2_img = Frame2.img.copy()
@@ -324,7 +330,10 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 	
 	for i in range(len(Frame1.corners)):
 		Frame1.corners[i] += avg_movement
+  
+	plotCorners(Frame1)
 	
+def plotCorners(Frame1: Frame):
 	# Plot the corners on the flow frame and frame
 	for i, corner in enumerate(Frame1.corners):
 		# Check if the corner is within the frame
