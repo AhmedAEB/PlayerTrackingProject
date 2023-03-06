@@ -7,6 +7,7 @@ from tools.deepsort import DeepSort
 from ultralytics import YOLO
 
 from matplotlib import pyplot as plt
+from sklearn.cluster import KMeans
 
 COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
 
@@ -40,11 +41,14 @@ class Frame():
 			source = self.img,
 			verbose = False
 		)
-		detections = results[0].boxes.numpy()
 		
-		if detections is None:
+		result = results[0].cpu().numpy()
+		
+		if result.boxes is None:
 			bboxes, scores, classes = [], [], []
 		else:
+			detections = splitTeams(result).boxes
+		
 			# Split detections into bboxes, scores and classes
 			bboxes, scores, classes = detections.xyxy, detections.conf, detections.cls
 
@@ -52,15 +56,24 @@ class Frame():
 			bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
 			
 			classes = classes.flatten().astype(int)
-			for i, tracker in enumerate(trackers):
-				# Get the detections for the current class
-				class_mask = classes == i
-				class_bboxes = bboxes[class_mask]
-				class_scores = scores[class_mask]
-				
-				# Update the tracker
-				tracker.update(self.img, class_bboxes, class_scores)
+   
+			# classes[classes == 3] = 2 # Change team b to team a # TODO: Remove this line when team b is detected properly
+			# Split the detections into team a, team b and referees
+			teama_boxes = bboxes[classes == 2]
+			teamb_boxes = bboxes[classes == 3]
+			ref_boxes = bboxes[classes == 1]
+   
+			teama_scores = scores[classes == 2]
+			teamb_scores = scores[classes == 3]
+			ref_scores = scores[classes == 1]
+   
+			# Update the trackers
+			print(teama_boxes, teama_scores)
+			trackers[0].update(self.img, teama_boxes, teama_scores)
+			trackers[1].update(self.img, teamb_boxes, teamb_scores)
+			trackers[2].update(self.img, ref_boxes, ref_scores)
 	 
+			for i, tracker in enumerate(trackers):
 				# Get the positions of the players and their colours
 				colours, positions = tracker.get_positions_c()
 	
@@ -362,7 +375,7 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
 	small_diagram = cv2.resize(diagram, (0, 0), fx=0.25, fy=0.25)
 
 	# Add the diagram to the top right corner of the frame
-	frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
+	# frame.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
 
 	# Add corner age to display frame
 	cv2.putText(frame.img, f"Corner Age: {frame.corners_age}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
@@ -379,3 +392,98 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
   
 	# Clear some memory
 	frame.clearMemory()
+ 
+TEAMODEL = YOLO("./weights/yolov8n-seg.pt")
+
+def splitTeams(result):
+	img = result.orig_img.copy()
+	
+	# Run a clustering algorithm on the xyxy coordinates of the players to split them into 2 teams
+	# This is done by finding the 2 clusters with the most players in them
+	
+	players = []
+ 
+	# Calculate largest box size
+	maxw = int(np.max(result.boxes.xywh[:, 2]))
+	maxh = int(np.max(result.boxes.xywh[:, 3]))
+ 
+	for box in result.boxes:
+		if box.cls == 0:
+			x1, y1, x2, y2 = box.xyxy[0].astype(int)
+			cutout = img[
+       			int(y1+0.2*maxh) : int(y2-0.4*maxh),
+          		int(x1+0.2*maxw) : int(x2-0.2*maxw)
+            ]
+   
+			# cutoutR = TEAMODEL(
+			# 	source = cutout,
+			# 	retina_masks = True,
+			# 	save = True,
+			# 	classes = [0],
+			# 	show = True,
+			# 	verbose = False
+			# )
+			
+			# if cutoutR[0].masks is not None:
+
+			# 	mask = cutoutR[0].masks.masks[0].numpy().astype(np.uint8)
+			# 	print(mask.shape, cutout.shape)
+			# 	# cv2.imshow("MASK", mask)
+			# 	cutout[mask == 0] = 0
+   
+			# cv2.imshow("CUTOUT", cutout)
+	
+   
+			# Use opencv to calculate the histogram of the cutout
+			hist = cv2.calcHist([cutout], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
+			
+   			# Apply gaussian blur to the histogram
+			hist = cv2.GaussianBlur(hist, (9, 9), 0)
+   
+			# Normalize the histogram to 0-1
+			hist = cv2.normalize(hist, hist).flatten()
+
+			# Add the histogram to the players array
+			players.append(hist)
+   
+	players = np.array(players)
+	
+	# Flatten to 2d array
+	players = players.reshape((players.shape[0], -1))
+ 
+	print(players.shape)
+	
+	# Run a kmeans clustering algorithm on the players
+	kmeans = KMeans(n_clusters=2, random_state=0).fit(players)
+	
+	# Get the labels for each player
+	labels = kmeans.labels_
+ 
+	print(labels)
+	# Set team a cls to 2 and team b cls to 3
+	print("CLS", result.boxes.cls)
+	i = 0
+	for box in result.boxes:
+		if box.cls == 0:
+			box.boxes[0][-1] = labels[i] + 2
+   
+			# Draw box on img (Red for team 1, Blue for team 2)
+			x1, y1, x2, y2 = box.xyxy[0].astype(int)
+   
+			fx1, fy1, fx2, fy2 = x1, y1, x2, y2
+			fx = (x1 + x2) / 2
+			fy = (y1 + y2) / 2
+			fx1 = fx 
+   
+			if labels[i] == 1:
+				cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
+			else:
+				cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+	
+			i += 1
+   
+	cv2.imshow("TEAMS", img)
+	cv2.waitKey(1)
+			
+	print("CLS", result.boxes.cls)
+	return result

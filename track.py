@@ -29,8 +29,9 @@ def run(opt):
 	yolov8 = YOLO(yolo_weights)
 
 	# initialize DeepSORT trackers for each players and referee
-	player_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="player")
-	referee_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="referee")
+	teama_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="A", colour=(0, 0, 255))
+	teamb_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="B", colour=(0, 255, 0))
+	referee_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, class_name="Ref", colour=(128, 128, 128))
 
 	# Initialise YoloV7 Instance Segmentation wrapper for court detection
 	yolov8_seg = YOLO(yolo_seg_weights)
@@ -41,6 +42,8 @@ def run(opt):
 	# Extract the video w, h and fps
 	w, h = int(video.get(cv2.CAP_PROP_FRAME_WIDTH)), int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
 	fps = int(video.get(cv2.CAP_PROP_FPS))
+ 
+	print(f"FPS: {fps}")
  
 	# Define the codec and create VideoWriter object
 	codec = cv2.VideoWriter_fourcc(*"avc1")
@@ -88,7 +91,7 @@ def run(opt):
 		frame.detectMask(yolov8_seg)
   
 		# Run player and referee detection + tracking (yolov7 + deepsort)
-		frame.detectAndTrack(yolov8, [player_tracker, referee_tracker])
+		frame.detectAndTrack(yolov8, [teama_tracker, teamb_tracker, referee_tracker])
 					
 		# Update the time taken and increment frame count
 		total_time += perf_counter() - start
