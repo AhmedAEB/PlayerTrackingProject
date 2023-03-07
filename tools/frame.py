@@ -446,11 +446,16 @@ def splitTeams(prev_tracks, tracks, frame):
 		x1, y1, x2, y2 = track.to_tlbr().astype(int)
 		w, h = x2 - x1, y2 - y1
   
+		# Adjust x and y positions to make them closer to the player's jersey
+		x1 += int(0.3 * w)
+		y1 += int(0.25 * h)
+		x2 -= int(0.4 * w)
+		y2 -= int(0.45 * h)
+
+		# Display a bounding box around the new positions
+		cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
   
-		cutout = img[
-			int(y1+0.2*h) : int(y2-0.4*h),
-			int(x1+0.2*w) : int(x2-0.2*w)
-		]
+		cutout = img[y1:y2, x1:x2]
 
 		# Use opencv to calculate the histogram of the cutout
 		hist = cv2.calcHist([cutout], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
@@ -463,6 +468,8 @@ def splitTeams(prev_tracks, tracks, frame):
 
 		# Add the histogram to the players array
 		players.append(hist)
+  
+	cv2.imshow("Team Detection", img)
 
 	players = np.array(players)
 	
