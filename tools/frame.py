@@ -106,11 +106,6 @@ class Frame():
 					# Append the positions to the list of positions
 					self.positions.extend(positions)
 					self.colours.extend(colours)
-	 
-				# Update the min and max y values
-				miny, maxy = tracker.get_min_max_y()
-				self.miny = min(self.miny, miny)
-				self.maxy = max(self.maxy, maxy)
 	
 	def detectMask(self, yoloWrapper: YOLO):
 		# Use yolo to detect the free throw area

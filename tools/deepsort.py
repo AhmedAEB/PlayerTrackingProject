@@ -73,19 +73,4 @@ class DeepSort():
 	def get_colour(self, track_id):
 		return self.colors[track_id]
 
-	def get_min_max_y(self):
-		miny, maxy = 1e+10, 0
-		for track in self.tracker.tracks:
-			if not track.is_confirmed() or track.time_since_update > 1:
-				continue
-			
-			_, y1, _, y2 = track.to_tlbr().astype(int)
-   
-			if y1 < miny:
-				miny = y1
-			if y2 > maxy:
-				maxy = y2
-
-		return miny if maxy > miny else 0, maxy
-
 # Path: tools/generate_detections.py
