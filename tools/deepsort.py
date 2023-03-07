@@ -14,7 +14,6 @@ class DeepSort():
 	def __init__(self, deepsort_weights, cosine_thresh, nn_budget, max_track_age, init_phase_frames, class_name, colour):
 		self.encoder = create_box_encoder(deepsort_weights, batch_size=1)
 		self.tracker = Tracker(NearestNeighborDistanceMetric("euclidean", cosine_thresh, nn_budget), max_age=max_track_age, n_init=init_phase_frames)
-		self.colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(1000)]
 		self.colour = colour
 		self.class_name = class_name
 
@@ -33,44 +32,5 @@ class DeepSort():
 				continue
 
 			tracks.append(track)
-			
-			# xyxy = track.to_tlbr().astype(int)
-   
-			# label = f"{track.track_id} : {self.class_name.title()}"
-
-			# plot_one_box(xyxy, frame, label=label, color=self.colour, line_thickness=2)
    
 		return tracks
-
-	def get_positions(self):
-		# Return a numpy array of tuples (track_id, x, y) where x and y is the center of the bottom of the bbox
-		positions = []
-		for track in self.tracker.tracks:
-			if not track.is_confirmed() or track.time_since_update > 1:
-				continue
-
-			xyxy = track.to_tlbr().astype(int)
-			
-			positions.append((track.track_id, int((xyxy[0] + xyxy[2]) / 2), int(xyxy[3])))
-
-		return np.array(positions, dtype=np.float32)
-
-	def get_positions_c(self):
-		# Return a numpy array of tuples (track_id, x, y) where x and y is the center of the bottom of the bbox
-		positions = []
-		colours = []
-		for track in self.tracker.tracks:
-			if not track.is_confirmed() or track.time_since_update > 1:
-				continue
-
-			xyxy = track.to_tlbr().astype(int)
-			
-			positions.append((int((xyxy[0] + xyxy[2]) / 2), int(xyxy[3])))
-			colours.append(self.colors[track.track_id])
-
-		return colours, positions
-
-	def get_colour(self, track_id):
-		return self.colors[track_id]
-
-# Path: tools/generate_detections.py

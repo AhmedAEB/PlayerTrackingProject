@@ -30,10 +30,6 @@ class Frame():
 
 		self.players = []
 		self.referees = []
-		self.positions = [] # x, y
-		self.miny = h + 1
-		self.maxy = 0
-		self.colours = [] # r, g, b
   
 	def clearMemory(self):
 		# Remove all unnecessary variables to free up memory
@@ -99,16 +95,6 @@ class Frame():
    
 			self.plotTracks(self.referees, BOX_COLORS, ['Referee'])
 			self.plotTracks(self.players, BOX_COLORS[1:], ['Team A', 'Team B'])
-
-			for i, tracker in enumerate(trackers):
-				# Get the positions of the players and their colours
-				colours, positions = tracker.get_positions_c()
-	
-				# Check if there are any positions
-				if len(positions) > 0:
-					# Append the positions to the list of positions
-					self.positions.extend(positions)
-					self.colours.extend(colours)
 	
 	def detectMask(self, yoloWrapper: YOLO):
 		# Use yolo to detect the free throw area
