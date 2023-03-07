@@ -1,14 +1,8 @@
-import random
-import numpy as np
-
 from deepsort.deep_sort.detection import Detection
 from deepsort.tools.generate_detections import create_box_encoder
 from deepsort.deep_sort.nn_matching import NearestNeighborDistanceMetric
 from deepsort.deep_sort.track import Track
 from deepsort.deep_sort.tracker import Tracker
-
-# Use yolov7.utils.plots to draw bboxes
-from tools.plot import plot_one_box
 
 class DeepSort():
 	def __init__(self, deepsort_weights, cosine_thresh, nn_budget, max_track_age, init_phase_frames, class_name, colour):

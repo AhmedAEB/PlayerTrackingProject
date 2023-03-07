@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 
 from tools.deepsort import DeepSort
-from tools.plot import plot_one_box
 from ultralytics import YOLO
 
 from matplotlib import pyplot as plt
@@ -36,20 +35,21 @@ class Frame():
 		self.mask = None
 		self.polygon = None
 		self.flow_frame = None
-  
+
 	def plotTracks(self, tracks, colours, labels):
 		for track in tracks:
 			colour = colours[track.team]
 	  
-			xyxy = track.to_tlbr().astype(int)
-   
-			plot_one_box(
-				   xyxy,
-				  self.img,
-				label = f'{track.track_id} : {labels[track.team]}',
-				 color = colour,
-				  line_thickness = 2
-			)
+			x1, y1, x2, y2 = track.to_tlbr().astype(int)
+ 
+			# Plot bounding box
+			cv2.rectangle(self.img, (x1, y1), (x2, y2), colour, 2)
+		
+			# Draw a box ontop of the player for the label
+			cv2.rectangle(self.img, (x1 - 1, y1 - 20), (x1 + 100, y1), colour, -1)
+		
+			# Plot label text
+			cv2.putText(self.img, f"{track.track_id} : {labels[track.team]}", (x1 + 2, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
   
 	def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
 		# Use YOLO to detect players and referees
@@ -177,7 +177,7 @@ class Frame():
 				self.corners.append((np.argmax(self.polygon[i, :]), i))
 				break
 
-		for i in range(self.polygon.shape[0]-1, -1, -1):
+		for i in range(self.polygon.shape[0] - 1, -1, -1):
 			# Check if the row contains any white pixels
 			if self.polygon[i, :].any():
 				self.corners.append((np.argmax(self.polygon[i, :]), i))
@@ -189,7 +189,7 @@ class Frame():
 				self.corners.append((i, np.argmax(self.polygon[:, i])))
 				break
 
-		for i in range(self.polygon.shape[1]-1, -1, -1):
+		for i in range(self.polygon.shape[1] - 1, -1, -1):
 			# Check if the column contains any white pixels
 			if self.polygon[:, i].any():
 				self.corners.append((i, np.argmax(self.polygon[:, i])))
