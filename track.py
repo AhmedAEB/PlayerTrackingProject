@@ -8,12 +8,9 @@ import numpy as np
 from collections import deque
 
 from tools.deepsort import DeepSort
-from tools.frame import Frame, updateCorners, saveFrame
+from tools.frame import Frame, updateCorners
 
 from ultralytics import YOLO
-
-def displayQ(queue):
-	return [str(frame.n) for frame in queue]
 
 def run(opt):
 	# Debugging Arguments
@@ -84,7 +81,7 @@ def run(opt):
 		if not ret:
 			break
 
-		frame = Frame(orig, i, w, h)
+		frame = Frame(orig, i, w, h, show_process)
   
 		# Get next frame from video
 		ret, orig = video.read()
@@ -139,11 +136,9 @@ def run(opt):
 			queue.appendleft(prev_frame)
    
 		while len(queue) > 0:
-			saveFrame(
+			queue.popleft().saveFrame(
 				diagram = diagram_empty.copy(),
-				frame = queue.popleft(),
 				output = output,
-				debug = show_process,
 			)
 			progress_bar.update(1)
 
