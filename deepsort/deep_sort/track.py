@@ -79,6 +79,10 @@ class Track:
 
         self._n_init = n_init
         self._max_age = max_age
+        
+        # Used by the team classification to see if clusters need swapping
+        self.team = 0
+        self.prev_teams = []
 
     def to_tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,

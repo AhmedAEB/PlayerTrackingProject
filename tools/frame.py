@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 from tools.deepsort import DeepSort
+from tools.plot import plot_one_box
 from ultralytics import YOLO
 
 from matplotlib import pyplot as plt
@@ -24,6 +25,8 @@ class Frame():
 		self.polygon = None
 		self.flow_frame = None
 
+		self.players = []
+		self.referees = []
 		self.positions = [] # x, y
 		self.miny = h + 1
 		self.maxy = 0
@@ -34,6 +37,20 @@ class Frame():
 		self.mask = None
 		self.polygon = None
 		self.flow_frame = None
+  
+	def plotTracks(self, tracks, colours, labels):
+		for track in tracks:
+			colour = colours[track.team]
+      
+			xyxy = track.to_tlbr().astype(int)
+   
+			plot_one_box(
+       			xyxy,
+          		self.img,
+            	label = f'{track.track_id} : {label}',
+             	color = colour,
+              	line_thickness = 2
+            )
   
 	def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
 		# Use YOLO to detect players and referees
@@ -47,7 +64,8 @@ class Frame():
 		if result.boxes is None:
 			bboxes, scores, classes = [], [], []
 		else:
-			detections = splitTeams(result).boxes
+			# detections = splitTeams(result).boxes
+			detections = result.boxes
 		
 			# Split detections into bboxes, scores and classes
 			bboxes, scores, classes = detections.xyxy, detections.conf, detections.cls
@@ -59,20 +77,26 @@ class Frame():
    
 			# classes[classes == 3] = 2 # Change team b to team a # TODO: Remove this line when team b is detected properly
 			# Split the detections into team a, team b and referees
-			teama_boxes = bboxes[classes == 2]
-			teamb_boxes = bboxes[classes == 3]
+			# teamb_boxes = bboxes[classes == 3]
+			player_boxes = bboxes[classes == 0]
 			ref_boxes = bboxes[classes == 1]
    
-			teama_scores = scores[classes == 2]
-			teamb_scores = scores[classes == 3]
+			# teamb_scores = scores[classes == 3]
+			player_scores = scores[classes == 0]
 			ref_scores = scores[classes == 1]
    
+			prev_players = trackers[0].tracker.tracks
+   
 			# Update the trackers
-			print(teama_boxes, teama_scores)
-			trackers[0].update(self.img, teama_boxes, teama_scores)
-			trackers[1].update(self.img, teamb_boxes, teamb_scores)
-			trackers[2].update(self.img, ref_boxes, ref_scores)
-	 
+			self.players = trackers[0].update(self.img, player_boxes, player_scores)
+			# trackers[1].update(self.img, teamb_boxes, teamb_scores)
+			self.referees = trackers[1].update(self.img, ref_boxes, ref_scores)
+   
+			self.players = splitTeams(prev_players, self.players, self)
+   
+			self.plotTracks(self.referees, COLORS, ['Referee'])
+			self.plotTracks(self.players, COLORS[1:], ['Team A', 'Team B'])
+
 			for i, tracker in enumerate(trackers):
 				# Get the positions of the players and their colours
 				colours, positions = tracker.get_positions_c()
@@ -160,7 +184,6 @@ class Frame():
 					self.corners.append((i, np.argmax(self.polygon[:, i])))
 					self.side = "right"
 					return
-			
 	 
 		# Run a line in each direction along the polygon and 
 		# record the coordinates of the first non-zero pixels
@@ -395,95 +418,81 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
  
 TEAMODEL = YOLO("./weights/yolov8n-seg.pt")
 
-def splitTeams(result):
-	img = result.orig_img.copy()
-	
+def splitTeams(prev_tracks, tracks, frame):
+	# Exit early if there are not enough tracks to split into 2 teams
+	if len(tracks) < 2:
+		return tracks
+    
 	# Run a clustering algorithm on the xyxy coordinates of the players to split them into 2 teams
 	# This is done by finding the 2 clusters with the most players in them
-	
+	img = frame.img.copy()
+ 
 	players = []
  
-	# Calculate largest box size
-	maxw = int(np.max(result.boxes.xywh[:, 2]))
-	maxh = int(np.max(result.boxes.xywh[:, 3]))
- 
-	for box in result.boxes:
-		if box.cls == 0:
-			x1, y1, x2, y2 = box.xyxy[0].astype(int)
-			cutout = img[
-       			int(y1+0.2*maxh) : int(y2-0.4*maxh),
-          		int(x1+0.2*maxw) : int(x2-0.2*maxw)
-            ]
-   
-			# cutoutR = TEAMODEL(
-			# 	source = cutout,
-			# 	retina_masks = True,
-			# 	save = True,
-			# 	classes = [0],
-			# 	show = True,
-			# 	verbose = False
-			# )
-			
-			# if cutoutR[0].masks is not None:
+	for track in tracks:
+		x1, y1, x2, y2 = track.to_tlbr().astype(int)
+		w, h = x2 - x1, y2 - y1
+  
+  
+		cutout = img[
+			int(y1+0.2*h) : int(y2-0.4*h),
+			int(x1+0.2*w) : int(x2-0.2*w)
+		]
 
-			# 	mask = cutoutR[0].masks.masks[0].numpy().astype(np.uint8)
-			# 	print(mask.shape, cutout.shape)
-			# 	# cv2.imshow("MASK", mask)
-			# 	cutout[mask == 0] = 0
-   
-			# cv2.imshow("CUTOUT", cutout)
-	
-   
-			# Use opencv to calculate the histogram of the cutout
-			hist = cv2.calcHist([cutout], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
-			
-   			# Apply gaussian blur to the histogram
-			hist = cv2.GaussianBlur(hist, (9, 9), 0)
-   
-			# Normalize the histogram to 0-1
-			hist = cv2.normalize(hist, hist).flatten()
+		# Use opencv to calculate the histogram of the cutout
+		hist = cv2.calcHist([cutout], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
+		
+		# Apply gaussian blur to the histogram
+		hist = cv2.GaussianBlur(hist, (9, 9), 0)
 
-			# Add the histogram to the players array
-			players.append(hist)
-   
+		# Normalize the histogram to 0-1
+		hist = cv2.normalize(hist, hist).flatten()
+
+		# Add the histogram to the players array
+		players.append(hist)
+
 	players = np.array(players)
 	
 	# Flatten to 2d array
 	players = players.reshape((players.shape[0], -1))
- 
-	print(players.shape)
 	
 	# Run a kmeans clustering algorithm on the players
-	kmeans = KMeans(n_clusters=2, random_state=0).fit(players)
+	kmeans = KMeans(
+     	n_clusters = 2,
+      	random_state = 0,
+       	n_init = "auto"
+    ).fit(players)
 	
 	# Get the labels for each player
 	labels = kmeans.labels_
  
-	print(labels)
-	# Set team a cls to 2 and team b cls to 3
-	print("CLS", result.boxes.cls)
-	i = 0
-	for box in result.boxes:
-		if box.cls == 0:
-			box.boxes[0][-1] = labels[i] + 2
-   
-			# Draw box on img (Red for team 1, Blue for team 2)
-			x1, y1, x2, y2 = box.xyxy[0].astype(int)
-   
-			fx1, fy1, fx2, fy2 = x1, y1, x2, y2
-			fx = (x1 + x2) / 2
-			fy = (y1 + y2) / 2
-			fx1 = fx 
-   
-			if labels[i] == 1:
-				cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
-			else:
-				cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+	id_to_team = {}
+	for track in prev_tracks:
+		id_to_team[track.track_id] = track.team
 	
-			i += 1
+	correct = 0
+	total = 0
+ 
+	for i, track in enumerate(tracks):
+		track.team = labels[i]
+  
+		if track.track_id in id_to_team:
+			if id_to_team[track.track_id] == track.team:
+				correct += 1
+			total += 1
    
-	cv2.imshow("TEAMS", img)
-	cv2.waitKey(1)
-			
-	print("CLS", result.boxes.cls)
-	return result
+	accuracy = correct / total if total > 0 else 0
+ 
+	if accuracy < 0.5:
+		# Swap the teams if the accuracy is less than 50%
+		for track in tracks:
+			track.team = 1 - track.team
+   
+	# Calculate final team for each track based on team prediction history
+	for track in tracks:
+		track.prev_teams.append(track.team)
+	
+		# Set the team to the most common team in the last 15 frames
+		track.team = max(set(track.prev_teams[-15:]), key = track.prev_teams[-15:].count)
+ 
+	return tracks

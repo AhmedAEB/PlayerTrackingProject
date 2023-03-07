@@ -19,6 +19,8 @@ class DeepSort():
 		self.class_name = class_name
 
 	def update(self, frame, bboxes, scores):
+		tracks = []
+    
 		feats = self.encoder(frame, bboxes)
 		dets = [Detection(*args) for args in zip(bboxes, scores, feats)]
 
@@ -29,14 +31,16 @@ class DeepSort():
 			# Skip tracks that are not confirmed or have not been updated for a long time
 			if not track.is_confirmed() or track.time_since_update > 1:
 				continue
-			
-			xyxy = track.to_tlbr().astype(int)
-   
-			label = f"{track.track_id} : {self.class_name.title()}"
 
-			plot_one_box(xyxy, frame, label=label, color=self.colour, line_thickness=2)
+			tracks.append(track)
+			
+			# xyxy = track.to_tlbr().astype(int)
    
-		return 
+			# label = f"{track.track_id} : {self.class_name.title()}"
+
+			# plot_one_box(xyxy, frame, label=label, color=self.colour, line_thickness=2)
+   
+		return tracks
 
 	def get_positions(self):
 		# Return a numpy array of tuples (track_id, x, y) where x and y is the center of the bottom of the bbox
