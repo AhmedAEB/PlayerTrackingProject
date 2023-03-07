@@ -4,9 +4,11 @@ import cv2
 import numpy as np
 
 from tools.deepsort import DeepSort
+from tools.plot import plot_one_box
 from ultralytics import YOLO
 
 from matplotlib import pyplot as plt
+from sklearn.cluster import KMeans
 
 COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
 
@@ -23,6 +25,8 @@ class Frame():
 		self.polygon = None
 		self.flow_frame = None
 
+		self.players = []
+		self.referees = []
 		self.positions = [] # x, y
 		self.miny = h + 1
 		self.maxy = 0
@@ -34,17 +38,35 @@ class Frame():
 		self.polygon = None
 		self.flow_frame = None
   
+	def plotTracks(self, tracks, colours, labels):
+		for track in tracks:
+			colour = colours[track.team]
+      
+			xyxy = track.to_tlbr().astype(int)
+   
+			plot_one_box(
+       			xyxy,
+          		self.img,
+            	label = f'{track.track_id} : {labels[track.team]}',
+             	color = colour,
+              	line_thickness = 2
+            )
+  
 	def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
 		# Use YOLO to detect players and referees
 		results = yoloWrapper(
 			source = self.img,
 			verbose = False
 		)
-		detections = results[0].boxes.numpy()
 		
-		if detections is None:
+		result = results[0].cpu().numpy()
+		
+		if result.boxes is None:
 			bboxes, scores, classes = [], [], []
 		else:
+			# detections = splitTeams(result).boxes
+			detections = result.boxes
+		
 			# Split detections into bboxes, scores and classes
 			bboxes, scores, classes = detections.xyxy, detections.conf, detections.cls
 
@@ -52,15 +74,30 @@ class Frame():
 			bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
 			
 			classes = classes.flatten().astype(int)
+   
+			# classes[classes == 3] = 2 # Change team b to team a # TODO: Remove this line when team b is detected properly
+			# Split the detections into team a, team b and referees
+			# teamb_boxes = bboxes[classes == 3]
+			player_boxes = bboxes[classes == 0]
+			ref_boxes = bboxes[classes == 1]
+   
+			# teamb_scores = scores[classes == 3]
+			player_scores = scores[classes == 0]
+			ref_scores = scores[classes == 1]
+   
+			prev_players = trackers[0].tracker.tracks
+   
+			# Update the trackers
+			self.players = trackers[0].update(self.img, player_boxes, player_scores)
+			# trackers[1].update(self.img, teamb_boxes, teamb_scores)
+			self.referees = trackers[1].update(self.img, ref_boxes, ref_scores)
+   
+			self.players = splitTeams(prev_players, self.players, self)
+   
+			self.plotTracks(self.referees, COLORS, ['Referee'])
+			self.plotTracks(self.players, COLORS[1:], ['Team A', 'Team B'])
+
 			for i, tracker in enumerate(trackers):
-				# Get the detections for the current class
-				class_mask = classes == i
-				class_bboxes = bboxes[class_mask]
-				class_scores = scores[class_mask]
-				
-				# Update the tracker
-				tracker.update(self.img, class_bboxes, class_scores)
-	 
 				# Get the positions of the players and their colours
 				colours, positions = tracker.get_positions_c()
 	
@@ -69,11 +106,6 @@ class Frame():
 					# Append the positions to the list of positions
 					self.positions.extend(positions)
 					self.colours.extend(colours)
-	 
-				# Update the min and max y values
-				miny, maxy = tracker.get_min_max_y()
-				self.miny = min(self.miny, miny)
-				self.maxy = max(self.maxy, maxy)
 	
 	def detectMask(self, yoloWrapper: YOLO):
 		# Use yolo to detect the free throw area
@@ -147,7 +179,6 @@ class Frame():
 					self.corners.append((i, np.argmax(self.polygon[:, i])))
 					self.side = "right"
 					return
-			
 	 
 		# Run a line in each direction along the polygon and 
 		# record the coordinates of the first non-zero pixels
@@ -243,6 +274,17 @@ class Frame():
 		if cv2.waitKey(1):
 			return
 
+	
+	def remove_tracks(self, flow):
+		for track in self.players + self.referees:
+			x1, y1, x2, y2 = track.to_tlbr().astype(int)
+
+			# Draw a solid black rectangle over the bbox + 100% padding
+			x1, y1, x2, y2 = x1 - int((x2 - x1) / 2), y1 - int((y2 - y1) / 2), x2 + int((x2 - x1) / 2), y2 + int((y2 - y1) / 2)
+			flow[y1:y2, x1:x2] = 0
+
+		return flow
+
 def updateCorners(Frame1: Frame, Frame2: Frame):
 	if len(Frame1.corners) == 1:
 		if Frame1.side == "left":
@@ -261,19 +303,9 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 		
 		plotCorners(Frame1)
 		return
-			
+ 
 	frame1_img = Frame1.img.copy()
 	frame2_img = Frame2.img.copy()
- 
-	miny = min(Frame1.miny, Frame2.miny)
-	maxy = max(Frame1.maxy, Frame2.maxy)
-
-	# Add 3% to the miny and maxy
-	miny, maxy = int(miny * 0.97), int(maxy * 1.03)
- 
-	# for tracker in trackers:
-	# 	frame1_img = tracker.get_frame_wo_tracks(frame1_img)
-	# 	frame2_img = tracker.get_frame_wo_tracks(frame2_img)
  
 	# Apply canny edge detection to the curr and next frames
 	frame1_img = cv2.Canny(frame1_img, 100, 200)
@@ -285,8 +317,8 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 	# Create a flow frame to display the flow vectors
 	Frame1.flow_frame = Frame1.img.copy()
  
-	# Reset flow vectors in range miny to maxy
-	flow[miny:maxy, :, :] = 0
+	# Reset flow vectors around detected players and referees
+	flow = Frame1.remove_tracks(flow)
  
 	# Reset top & bottom 15% of flow vectors
 	flow[:int(flow.shape[0] * 0.15), :, :] = 0
@@ -294,7 +326,7 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
  
 	# Calculate the average x and y movement ignoring vectors with magnitude less than 1
 	avg_movement = np.array([0, 0], dtype=np.float32)
-	count = 0
+	count = 1
 	
 	# Loop through each pixel in the flow
 	for y in range(0, flow.shape[0], 10):
@@ -323,7 +355,7 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 	Frame1.corners_age = Frame2.corners_age + 1
 	
 	# Increase avg_movement proportional to the age of the corners
-	avg_movement *= (Frame1.corners_age ** 1.09) * 0.001 + 1
+	# avg_movement *= (Frame1.corners_age ** 1.09) * 0.001 + 1
  
 	# Update corners with average movement
 	avg_movement = avg_movement.astype(int)
@@ -379,3 +411,84 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
   
 	# Clear some memory
 	frame.clearMemory()
+ 
+TEAMODEL = YOLO("./weights/yolov8n-seg.pt")
+
+def splitTeams(prev_tracks, tracks, frame):
+	# Exit early if there are not enough tracks to split into 2 teams
+	if len(tracks) < 2:
+		return tracks
+    
+	# Run a clustering algorithm on the xyxy coordinates of the players to split them into 2 teams
+	# This is done by finding the 2 clusters with the most players in them
+	img = frame.img.copy()
+ 
+	players = []
+ 
+	for track in tracks:
+		x1, y1, x2, y2 = track.to_tlbr().astype(int)
+		w, h = x2 - x1, y2 - y1
+  
+  
+		cutout = img[
+			int(y1+0.2*h) : int(y2-0.4*h),
+			int(x1+0.2*w) : int(x2-0.2*w)
+		]
+
+		# Use opencv to calculate the histogram of the cutout
+		hist = cv2.calcHist([cutout], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
+		
+		# Apply gaussian blur to the histogram
+		hist = cv2.GaussianBlur(hist, (9, 9), 0)
+
+		# Normalize the histogram to 0-1
+		hist = cv2.normalize(hist, hist).flatten()
+
+		# Add the histogram to the players array
+		players.append(hist)
+
+	players = np.array(players)
+	
+	# Flatten to 2d array
+	players = players.reshape((players.shape[0], -1))
+	
+	# Run a kmeans clustering algorithm on the players
+	kmeans = KMeans(
+     	n_clusters = 2,
+      	random_state = 0,
+       	n_init = "auto"
+    ).fit(players)
+	
+	# Get the labels for each player
+	labels = kmeans.labels_
+ 
+	id_to_team = {}
+	for track in prev_tracks:
+		id_to_team[track.track_id] = track.team
+	
+	correct = 0
+	total = 0
+ 
+	for i, track in enumerate(tracks):
+		track.team = labels[i]
+  
+		if track.track_id in id_to_team:
+			if id_to_team[track.track_id] == track.team:
+				correct += 1
+			total += 1
+   
+	accuracy = correct / total if total > 0 else 0
+ 
+	if accuracy < 0.5:
+		# Swap the teams if the accuracy is less than 50%
+		for track in tracks:
+			track.team = 1 - track.team
+   
+	# Calculate final team for each track based on team prediction history
+	for track in tracks:
+		track.prev_teams.append(track.team)
+	
+		# Set the team to the most common team in the last 15 frames
+		track.team = max(set(track.prev_teams[-15:]), key = track.prev_teams[-15:].count)
+ 
+	return tracks
