@@ -12,6 +12,9 @@ from sklearn.cluster import KMeans
 
 COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
 
+# grey, pastel blue, pastel red for referees, team A, team B
+BOX_COLORS = [(128, 128, 128), (128, 128, 255), (255, 128, 128)]
+
 class Frame():
 	def __init__(self, img, n, w, h):
 		self.img = img
@@ -27,10 +30,6 @@ class Frame():
 
 		self.players = []
 		self.referees = []
-		self.positions = [] # x, y
-		self.miny = h + 1
-		self.maxy = 0
-		self.colours = [] # r, g, b
   
 	def clearMemory(self):
 		# Remove all unnecessary variables to free up memory
@@ -41,16 +40,16 @@ class Frame():
 	def plotTracks(self, tracks, colours, labels):
 		for track in tracks:
 			colour = colours[track.team]
-      
+	  
 			xyxy = track.to_tlbr().astype(int)
    
 			plot_one_box(
-       			xyxy,
-          		self.img,
-            	label = f'{track.track_id} : {labels[track.team]}',
-             	color = colour,
-              	line_thickness = 2
-            )
+				   xyxy,
+				  self.img,
+				label = f'{track.track_id} : {labels[track.team]}',
+				 color = colour,
+				  line_thickness = 2
+			)
   
 	def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
 		# Use YOLO to detect players and referees
@@ -94,18 +93,8 @@ class Frame():
    
 			self.players = splitTeams(prev_players, self.players, self)
    
-			self.plotTracks(self.referees, COLORS, ['Referee'])
-			self.plotTracks(self.players, COLORS[1:], ['Team A', 'Team B'])
-
-			for i, tracker in enumerate(trackers):
-				# Get the positions of the players and their colours
-				colours, positions = tracker.get_positions_c()
-	
-				# Check if there are any positions
-				if len(positions) > 0:
-					# Append the positions to the list of positions
-					self.positions.extend(positions)
-					self.colours.extend(colours)
+			self.plotTracks(self.referees, BOX_COLORS, ['Referee'])
+			self.plotTracks(self.players, BOX_COLORS[1:], ['Team A', 'Team B'])
 	
 	def detectMask(self, yoloWrapper: YOLO):
 		# Use yolo to detect the free throw area
@@ -240,14 +229,42 @@ class Frame():
 	 
 		# Get the transformation matrix
 		M = cv2.getPerspectiveTransform(self.corners, self.diagram_corners)
-  
-		if len(self.positions) > 0:
-			# Use self.positions and self.colours to draw the positions on the diagram
-			positions = np.array(self.positions)[np.newaxis].astype(np.float32)
-			positions = cv2.perspectiveTransform(positions, M)
-			for i, position in enumerate(positions[0]):
-				x, y = position.astype(int)
-				cv2.circle(diagram, (x, y), 15, self.colours[i], -1)
+
+		# Loop through the players and draw their positions on the diagram
+		for track in self.players:
+			# Get the player's position
+			xyxy = track.to_tlbr().astype(int)
+   
+			# Get the player's centre
+			x = (xyxy[0] + xyxy[2]) // 2
+			y = xyxy[3]
+   
+			# Get the player's position on the diagram
+			xy = np.array([[x, y]], dtype=np.float32)[np.newaxis]
+	
+			# Transform the player's position
+			xy = cv2.perspectiveTransform(xy, M)[0][0]
+   
+			# Draw the player's position on the diagram based on their team
+			cv2.circle(diagram, tuple(xy.astype(int)), 15, BOX_COLORS[track.team + 1], -1)
+   
+		# Do the same for the referees
+		for track in self.referees:
+			# Get the referee's position
+			xyxy = track.to_tlbr().astype(int)
+   
+			# Get the referee's centre
+			x = (xyxy[0] + xyxy[2]) // 2
+			y = xyxy[3]
+   
+			# Get the referee's position on the diagram
+			xy = np.array([[x, y]], dtype=np.float32)[np.newaxis]
+	
+			# Transform the referee's position
+			xy = cv2.perspectiveTransform(xy, M)[0][0]
+   
+			# Draw the referee's position on the diagram based on their team
+			cv2.circle(diagram, tuple(xy.astype(int)), 15, BOX_COLORS[track.team], -1)
 	
 		# Display corners on diagram
 		for i, corner in enumerate(self.diagram_corners):
@@ -418,7 +435,7 @@ def splitTeams(prev_tracks, tracks, frame):
 	# Exit early if there are not enough tracks to split into 2 teams
 	if len(tracks) < 2:
 		return tracks
-    
+	
 	# Run a clustering algorithm on the xyxy coordinates of the players to split them into 2 teams
 	# This is done by finding the 2 clusters with the most players in them
 	img = frame.img.copy()
@@ -454,10 +471,10 @@ def splitTeams(prev_tracks, tracks, frame):
 	
 	# Run a kmeans clustering algorithm on the players
 	kmeans = KMeans(
-     	n_clusters = 2,
-      	random_state = 0,
-       	n_init = "auto"
-    ).fit(players)
+		 n_clusters = 2,
+		  random_state = 0,
+		   n_init = "auto"
+	).fit(players)
 	
 	# Get the labels for each player
 	labels = kmeans.labels_
