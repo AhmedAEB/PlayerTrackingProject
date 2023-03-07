@@ -1,7 +1,7 @@
 import argparse
 from os import path
 from time import perf_counter
-from tqdm import trange
+from tqdm import tqdm
 
 import cv2
 import numpy as np
@@ -75,7 +75,8 @@ def run(opt):
 	diagram_empty = cv2.imread('diagram.jpg')
 
 	# Loop through all frames
-	for i in trange(total_frames, desc="Processing..."):
+	progress_bar = tqdm(total=total_frames)
+	for i in range(total_frames):
 		# Start timer for current frame
 		start = perf_counter()
   
@@ -144,6 +145,7 @@ def run(opt):
 				output = output,
 				debug = show_process,
 			)
+			progress_bar.update(1)
 
 		prev_frame = frame
    

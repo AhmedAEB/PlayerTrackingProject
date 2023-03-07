@@ -6,7 +6,6 @@ import numpy as np
 from tools.deepsort import DeepSort
 from ultralytics import YOLO
 
-from matplotlib import pyplot as plt
 from sklearn.cluster import KMeans
 
 COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
@@ -21,20 +20,23 @@ class Frame():
 		self.w, self.h = w, h
   
 		self.corners = []
+		self.players = []
+		self.referees = []
 		self.diagram_corners = None
 		self.corners_age = 1e+5
+  
+		# Debug frames
 		self.mask = None
 		self.polygon = None
 		self.flow_frame = None
+		self.team_frame = None
 
-		self.players = []
-		self.referees = []
-  
 	def clearMemory(self):
 		# Remove all unnecessary variables to free up memory
 		self.mask = None
 		self.polygon = None
 		self.flow_frame = None
+		self.team_frame = None
 
 	def plotTracks(self, tracks, colours, labels):
 		for track in tracks:
@@ -44,13 +46,20 @@ class Frame():
  
 			# Plot bounding box
 			cv2.rectangle(self.img, (x1, y1), (x2, y2), colour, 2)
+   
+			track.track_id += 100
+   
+			# Calculate the extra width needed for the label
+			extra_width = 15 * (len(str(track.track_id)) - 1)
 		
 			# Draw a box ontop of the player for the label
-			cv2.rectangle(self.img, (x1 - 1, y1 - 20), (x1 + 100, y1), colour, -1)
-		
+			cv2.rectangle(self.img, (x1 - 1, y1 - 20), (x1 + 95 + extra_width, y1), colour, -1)
+   
 			# Plot label text
 			cv2.putText(self.img, f"{track.track_id} : {labels[track.team]}", (x1 + 2, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
   
+			track.track_id -= 100
+   
 	def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
 		# Use YOLO to detect players and referees
 		results = yoloWrapper(
@@ -63,7 +72,6 @@ class Frame():
 		if result.boxes is None:
 			bboxes, scores, classes = [], [], []
 		else:
-			# detections = splitTeams(result).boxes
 			detections = result.boxes
 		
 			# Split detections into bboxes, scores and classes
@@ -73,10 +81,7 @@ class Frame():
 			bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
 			
 			classes = classes.flatten().astype(int)
-   
-			# classes[classes == 3] = 2 # Change team b to team a # TODO: Remove this line when team b is detected properly
-			# Split the detections into team a, team b and referees
-			# teamb_boxes = bboxes[classes == 3]
+
 			player_boxes = bboxes[classes == 0]
 			ref_boxes = bboxes[classes == 1]
    
@@ -88,10 +93,9 @@ class Frame():
    
 			# Update the trackers
 			self.players = trackers[0].update(self.img, player_boxes, player_scores)
-			# trackers[1].update(self.img, teamb_boxes, teamb_scores)
 			self.referees = trackers[1].update(self.img, ref_boxes, ref_scores)
    
-			self.players = splitTeams(prev_players, self.players, self)
+			self.players = self.splitTeams(prev_players, self.players)
    
 			self.plotTracks(self.referees, BOX_COLORS, ['Referee'])
 			self.plotTracks(self.players, BOX_COLORS[1:], ['Team A', 'Team B'])
@@ -273,10 +277,6 @@ class Frame():
 		return diagram
   
 	def displayAll(self):
-		# Display the optical flow frame
-		if self.flow_frame is not None:
-			cv2.imshow("Optical Flow", self.flow_frame)
-  
 		# Display the mask
 		if self.mask is not None:
 			cv2.imshow("Mask", self.mask)
@@ -284,6 +284,14 @@ class Frame():
 		# Display the polygon
 		if self.polygon is not None:
 			cv2.imshow("Polygon", self.polygon)
+   
+		# Display the optical flow frame
+		if self.flow_frame is not None:
+			cv2.imshow("Optical Flow", self.flow_frame)
+   
+		# Display the Team Split
+		if self.team_frame is not None:
+			cv2.imshow("Team Split", self.team_frame)
    
 		# Display the frame
 		cv2.imshow("Frame", self.img)
@@ -301,6 +309,91 @@ class Frame():
 			flow[y1:y2, x1:x2] = 0
 
 		return flow
+
+	def splitTeams(self, prev_tracks, tracks):
+		# Exit early if there are not enough tracks to split into 2 teams
+		if len(tracks) < 2:
+			return tracks
+		
+		# Run a clustering algorithm on the xyxy coordinates of the players to split them into 2 teams
+		# This is done by finding the 2 clusters with the most players in them
+		self.team_frame = self.img.copy()
+	
+		players = []
+	
+		for track in tracks:
+			x1, y1, x2, y2 = track.to_tlbr().astype(int)
+			w, h = x2 - x1, y2 - y1
+	
+			# Adjust x and y positions to make them closer to the player's jersey
+			x1 += int(0.3 * w)
+			y1 += int(0.25 * h)
+			x2 -= int(0.4 * w)
+			y2 -= int(0.45 * h)
+
+			# Get the cutout of the player
+			cutout = self.team_frame[y1:y2, x1:x2]
+	
+			# Display a bounding box around the new positions
+			cv2.rectangle(self.team_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+			# Use opencv to calculate the histogram of the cutout
+			hist = cv2.calcHist([cutout], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
+			
+			# Apply gaussian blur to the histogram
+			hist = cv2.GaussianBlur(hist, (9, 9), 0)
+
+			# Normalize the histogram to 0-1
+			hist = cv2.normalize(hist, hist).flatten()
+
+			# Add the histogram to the players array
+			players.append(hist)
+
+		players = np.array(players)
+		
+		# Flatten to 2d array
+		players = players.reshape((players.shape[0], -1))
+		
+		# Run a kmeans clustering algorithm on the players
+		kmeans = KMeans(
+			n_clusters = 2,
+			random_state = 0,
+			n_init = "auto"
+		).fit(players)
+		
+		# Get the labels for each player
+		labels = kmeans.labels_
+	
+		id_to_team = {}
+		for track in prev_tracks:
+			id_to_team[track.track_id] = track.team
+		
+		correct = 0
+		total = 0
+	
+		for i, track in enumerate(tracks):
+			track.team = labels[i]
+	
+			if track.track_id in id_to_team:
+				if id_to_team[track.track_id] == track.team:
+					correct += 1
+				total += 1
+	
+		accuracy = correct / total if total > 0 else 0
+	
+		if accuracy < 0.5:
+			# Swap the teams if the accuracy is less than 50%
+			for track in tracks:
+				track.team = 1 - track.team
+	
+		# Calculate final team for each track based on team prediction history
+		for track in tracks:
+			track.prev_teams.append(track.team)
+		
+			# Set the team to the most common team in the last 15 frames
+			track.team = max(set(track.prev_teams[-15:]), key = track.prev_teams[-15:].count)
+	
+		return tracks
 
 def updateCorners(Frame1: Frame, Frame2: Frame):
 	if len(Frame1.corners) == 1:
@@ -392,8 +485,13 @@ def plotCorners(Frame1: Frame):
 		cv2.circle(Frame1.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
 
 def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug: bool = False):
-	# assert that the frame has 4 corners and the diagram has 4 corners
+	# Run some validation checks on the frame
+ 
+	# Check that the frame has 4 corners
 	assert len(frame.corners) == 4 and len(frame.diagram_corners) == 4
+ 
+	# Check that the frames corners age is less than 1e+5
+	assert frame.corners_age < 1e+5
 	
 	# Draw white square in top left corner for text
 	cv2.rectangle(frame.img, (0, 0), (200, 70), (255, 255, 255), -1)
@@ -428,91 +526,3 @@ def saveFrame(diagram: np.ndarray, frame: Frame, output: cv2.VideoWriter, debug:
   
 	# Clear some memory
 	frame.clearMemory()
- 
-TEAMODEL = YOLO("./weights/yolov8n-seg.pt")
-
-def splitTeams(prev_tracks, tracks, frame):
-	# Exit early if there are not enough tracks to split into 2 teams
-	if len(tracks) < 2:
-		return tracks
-	
-	# Run a clustering algorithm on the xyxy coordinates of the players to split them into 2 teams
-	# This is done by finding the 2 clusters with the most players in them
-	img = frame.img.copy()
- 
-	players = []
- 
-	for track in tracks:
-		x1, y1, x2, y2 = track.to_tlbr().astype(int)
-		w, h = x2 - x1, y2 - y1
-  
-		# Adjust x and y positions to make them closer to the player's jersey
-		x1 += int(0.3 * w)
-		y1 += int(0.25 * h)
-		x2 -= int(0.4 * w)
-		y2 -= int(0.45 * h)
-
-		# Display a bounding box around the new positions
-		cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-  
-		cutout = img[y1:y2, x1:x2]
-
-		# Use opencv to calculate the histogram of the cutout
-		hist = cv2.calcHist([cutout], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
-		
-		# Apply gaussian blur to the histogram
-		hist = cv2.GaussianBlur(hist, (9, 9), 0)
-
-		# Normalize the histogram to 0-1
-		hist = cv2.normalize(hist, hist).flatten()
-
-		# Add the histogram to the players array
-		players.append(hist)
-  
-	cv2.imshow("Team Detection", img)
-
-	players = np.array(players)
-	
-	# Flatten to 2d array
-	players = players.reshape((players.shape[0], -1))
-	
-	# Run a kmeans clustering algorithm on the players
-	kmeans = KMeans(
-		 n_clusters = 2,
-		  random_state = 0,
-		   n_init = "auto"
-	).fit(players)
-	
-	# Get the labels for each player
-	labels = kmeans.labels_
- 
-	id_to_team = {}
-	for track in prev_tracks:
-		id_to_team[track.track_id] = track.team
-	
-	correct = 0
-	total = 0
- 
-	for i, track in enumerate(tracks):
-		track.team = labels[i]
-  
-		if track.track_id in id_to_team:
-			if id_to_team[track.track_id] == track.team:
-				correct += 1
-			total += 1
-   
-	accuracy = correct / total if total > 0 else 0
- 
-	if accuracy < 0.5:
-		# Swap the teams if the accuracy is less than 50%
-		for track in tracks:
-			track.team = 1 - track.team
-   
-	# Calculate final team for each track based on team prediction history
-	for track in tracks:
-		track.prev_teams.append(track.team)
-	
-		# Set the team to the most common team in the last 15 frames
-		track.team = max(set(track.prev_teams[-15:]), key = track.prev_teams[-15:].count)
- 
-	return tracks
