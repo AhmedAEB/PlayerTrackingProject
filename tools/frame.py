@@ -47,18 +47,14 @@ class Frame():
 			# Plot bounding box
 			cv2.rectangle(self.img, (x1, y1), (x2, y2), colour, 2)
    
-			track.track_id += 100
-   
 			# Calculate the extra width needed for the label
-			extra_width = 15 * (len(str(track.track_id)) - 1)
+			extra_width = 12 * (len(str(track.track_id)) - 1)
 		
 			# Draw a box ontop of the player for the label
 			cv2.rectangle(self.img, (x1 - 1, y1 - 20), (x1 + 95 + extra_width, y1), colour, -1)
    
 			# Plot label text
 			cv2.putText(self.img, f"{track.track_id} : {labels[track.team]}", (x1 + 2, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
-  
-			track.track_id -= 100
    
 	def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
 		# Use YOLO to detect players and referees
