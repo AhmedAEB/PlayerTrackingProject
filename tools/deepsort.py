@@ -73,19 +73,6 @@ class DeepSort():
 	def get_colour(self, track_id):
 		return self.colors[track_id]
 
-	def get_frame_wo_tracks(self, frame):
-		for track in self.tracker.tracks:
-			if not track.is_confirmed() or track.time_since_update > 1:
-				continue
-			
-			x1, y1, x2, y2 = track.to_tlbr().astype(int)
-   
-			# Draw a solid black rectangle over the bbox + 50% padding
-			x1, y1, x2, y2 = x1 - int((x2 - x1) / 2), y1 - int((y2 - y1) / 2), x2 + int((x2 - x1) / 2), y2 + int((y2 - y1) / 2)
-			frame[y1:y2, x1:x2] = 0
-
-		return frame
-
 	def get_min_max_y(self):
 		miny, maxy = 1e+10, 0
 		for track in self.tracker.tracks:

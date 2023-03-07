@@ -47,7 +47,7 @@ class Frame():
 			plot_one_box(
        			xyxy,
           		self.img,
-            	label = f'{track.track_id} : {label}',
+            	label = f'{track.track_id} : {labels[track.team]}',
              	color = colour,
               	line_thickness = 2
             )
@@ -279,6 +279,17 @@ class Frame():
 		if cv2.waitKey(1):
 			return
 
+	
+	def remove_tracks(self, flow):
+		for track in self.players + self.referees:
+			x1, y1, x2, y2 = track.to_tlbr().astype(int)
+
+			# Draw a solid black rectangle over the bbox + 100% padding
+			x1, y1, x2, y2 = x1 - int((x2 - x1) / 2), y1 - int((y2 - y1) / 2), x2 + int((x2 - x1) / 2), y2 + int((y2 - y1) / 2)
+			flow[y1:y2, x1:x2] = 0
+
+		return flow
+
 def updateCorners(Frame1: Frame, Frame2: Frame):
 	if len(Frame1.corners) == 1:
 		if Frame1.side == "left":
@@ -297,19 +308,9 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 		
 		plotCorners(Frame1)
 		return
-			
+ 
 	frame1_img = Frame1.img.copy()
 	frame2_img = Frame2.img.copy()
- 
-	miny = min(Frame1.miny, Frame2.miny)
-	maxy = max(Frame1.maxy, Frame2.maxy)
-
-	# Add 3% to the miny and maxy
-	miny, maxy = int(miny * 0.97), int(maxy * 1.03)
- 
-	# for tracker in trackers:
-	# 	frame1_img = tracker.get_frame_wo_tracks(frame1_img)
-	# 	frame2_img = tracker.get_frame_wo_tracks(frame2_img)
  
 	# Apply canny edge detection to the curr and next frames
 	frame1_img = cv2.Canny(frame1_img, 100, 200)
@@ -321,8 +322,8 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 	# Create a flow frame to display the flow vectors
 	Frame1.flow_frame = Frame1.img.copy()
  
-	# Reset flow vectors in range miny to maxy
-	flow[miny:maxy, :, :] = 0
+	# Reset flow vectors around detected players and referees
+	flow = Frame1.remove_tracks(flow)
  
 	# Reset top & bottom 15% of flow vectors
 	flow[:int(flow.shape[0] * 0.15), :, :] = 0
@@ -330,7 +331,7 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
  
 	# Calculate the average x and y movement ignoring vectors with magnitude less than 1
 	avg_movement = np.array([0, 0], dtype=np.float32)
-	count = 0
+	count = 1
 	
 	# Loop through each pixel in the flow
 	for y in range(0, flow.shape[0], 10):
@@ -359,7 +360,7 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
 	Frame1.corners_age = Frame2.corners_age + 1
 	
 	# Increase avg_movement proportional to the age of the corners
-	avg_movement *= (Frame1.corners_age ** 1.09) * 0.001 + 1
+	# avg_movement *= (Frame1.corners_age ** 1.09) * 0.001 + 1
  
 	# Update corners with average movement
 	avg_movement = avg_movement.astype(int)
