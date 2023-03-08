@@ -1,8 +1,8 @@
-from deepsort.deep_sort.detection import Detection
-from deepsort.tools.generate_detections import create_box_encoder
-from deepsort.deep_sort.nn_matching import NearestNeighborDistanceMetric
-from deepsort.deep_sort.track import Track
-from deepsort.deep_sort.tracker import Tracker
+from deepsort.detection import Detection
+from deepsort.generate_detections import create_box_encoder
+from deepsort.nn_matching import NearestNeighborDistanceMetric
+from deepsort.track import Track
+from deepsort.tracker import Tracker
 
 class DeepSort():
 	def __init__(self, deepsort_weights, cosine_thresh, nn_budget, max_track_age, init_phase_frames, colour):

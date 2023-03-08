@@ -3,7 +3,7 @@ from typing import List
 import cv2
 import numpy as np
 
-from tools.deepsort import DeepSort
+from utils.deepsort import DeepSort
 from ultralytics import YOLO
 
 from sklearn.cluster import KMeans
