@@ -15,6 +15,8 @@ BOX_COLORS = [(128, 128, 128), (128, 128, 255), (255, 128, 128)]
 
 class Frame():
     def __init__(self, img, n, w, h, debug):
+        self.orig_img = img.copy()
+        
         self.img = img
         self.n = n# frame number for debugging
         self.w, self.h = w, h
@@ -31,6 +33,7 @@ class Frame():
         self.polygon = None
         self.flow_frame = None
         self.team_frame = None
+        self.diagram = None
         self.debug = debug
 
     def clearMemory(self):
@@ -39,6 +42,7 @@ class Frame():
         self.polygon = None
         self.flow_frame = None
         self.team_frame = None
+        self.diagram = None
 
     def plotTracks(self, tracks, colours, labels):
         for track in tracks:
@@ -61,7 +65,7 @@ class Frame():
     def detectAndTrack(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
         # Use YOLO to detect players and referees
         results = yoloWrapper(
-            source = self.img,
+            source = self.orig_img,
             verbose = False
         )
         
@@ -74,7 +78,7 @@ class Frame():
         
             # Split detections into bboxes, scores and classes
             bboxes, scores, classes = detections.xyxy, detections.conf, detections.cls
-
+            
             # Convert bboxes to deepsort format
             bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
             
@@ -90,8 +94,8 @@ class Frame():
             prev_players = trackers[0].tracker.tracks
    
             # Update the trackers
-            self.players = trackers[0].update(self.img, player_boxes, player_scores)
-            self.referees = trackers[1].update(self.img, ref_boxes, ref_scores)
+            self.players = trackers[0].update(self.orig_img, player_boxes, player_scores)
+            self.referees = trackers[1].update(self.orig_img, ref_boxes, ref_scores)
             
             for track in self.players + self.referees:
                 self.xyxy.append(track.to_tlbr().astype(int))
@@ -104,7 +108,7 @@ class Frame():
     def detectMask(self, yoloWrapper: YOLO):
         # Use yolo to detect the free throw area
         results = yoloWrapper(
-            source = self.img,
+            source = self.orig_img,
             retina_masks = True,
             verbose = False
         )
@@ -293,6 +297,10 @@ class Frame():
         # Display the Team Split
         if self.team_frame is not None:
             cv2.imshow("Team Split", self.team_frame)
+            
+        # Display the birds eye view diagram
+        if self.diagram is not None:
+            cv2.imshow("Birds Eye View", self.diagram)
    
         # Display the frame
         cv2.imshow("Frame", self.img)
@@ -303,6 +311,11 @@ class Frame():
     def remove_tracks(self, flow):
         for xyxy in self.xyxy:
             x1, y1, x2, y2 = xyxy
+            
+            x1 -= 20
+            y1 -= 20
+            x2 += 20
+            y2 += 20
 
             # Set flow to 0 for the area around the player, flow is of shape (h, w, 2)
             cv2.rectangle(flow, (x1, y1), (x2, y2), (0, 0), -1)
@@ -316,7 +329,7 @@ class Frame():
         
         # Run a clustering algorithm on the xyxy coordinates of the players to split them into 2 teams
         # This is done by finding the 2 clusters with the most players in them
-        self.team_frame = self.img.copy()
+        self.team_frame = self.orig_img.copy()
     
         players = []
     
@@ -387,10 +400,11 @@ class Frame():
     
         # Calculate final team for each track based on team prediction history
         for track in tracks:
-            track.prev_teams.append(track.team)
+            if len(track.prev_teams) < 20:
+                track.prev_teams.append(track.team)
         
-            # Set the team to the most common team in the last 15 frames
-            track.team = max(set(track.prev_teams[-15:]), key = track.prev_teams[-15:].count)
+            # Set the team to the most common team in the last n frames
+            track.team = max(set(track.prev_teams), key = track.prev_teams.count)
     
         return tracks
         
@@ -422,10 +436,13 @@ class Frame():
         cv2.putText(self.img, f"Frame: {self.n}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
     
         # Get the homography for the current frame
-        diagram = self.applyHomography(diagram)
+        self.diagram = self.applyHomography(diagram)
+        
+        # Calculate scale needed (diagram width/frame width)
+        scale = self.img.shape[1] / self.diagram.shape[1] / 2.5
 
         # Place a downsized version of the diagram in the top right corner of the frame
-        small_diagram = cv2.resize(diagram, (0, 0), fx=0.25, fy=0.25)
+        small_diagram = cv2.resize(diagram, (0, 0), fx = scale, fy = scale)
 
         # Add the diagram to the top right corner of the frame
         self.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
@@ -465,8 +482,8 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
         Frame1.plotCorners()
         return
  
-    frame1_img = Frame1.img.copy()
-    frame2_img = Frame2.img.copy()
+    frame1_img = Frame1.orig_img.copy()
+    frame2_img = Frame2.orig_img.copy()
  
     # Apply canny edge detection to the curr and next frames
     frame1_img = cv2.Canny(frame1_img, 100, 200)
@@ -476,7 +493,7 @@ def updateCorners(Frame1: Frame, Frame2: Frame):
     flow = cv2.calcOpticalFlowFarneback(frame2_img, frame1_img, None, 0.5, 10, 30, 3, 5, 1.5, 0)
  
     # Create a flow frame to display the flow vectors
-    Frame1.flow_frame = Frame1.img.copy()
+    Frame1.flow_frame = Frame1.orig_img.copy()
  
     # Reset flow vectors around detected players and referees
     flow = Frame1.remove_tracks(flow)
