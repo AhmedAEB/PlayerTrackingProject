@@ -12,7 +12,7 @@ from ultralytics import YOLO
 from utils.frame import Frame, updateCorners
 
 class Engine():
-	def __init__(self, config_file = "config.json", override_args = None):
+	def __init__(self, config_file = "config.json", **override_args):
 		# Load config.json as attributes
 		self.load_config(config_file)
   
@@ -116,8 +116,58 @@ class Engine():
 		# Override config.json with override_config
 		for key, value in args.items():
 			setattr(self, key, value)
+   
+	def detect_image(self, **override_args):
+		# Override config.json with args from command line
+		if override_args is not None:
+			yolo_prev = self.yolo_weights
+			yolo_seg_prev = self.yolo_seg_weights
+      
+			self.override_config(override_args)
+   
+			if yolo_prev != self.yolo_weights:
+				self.yolov8 = YOLO(self.yolo_weights)
+	
+			if yolo_seg_prev != self.yolo_seg_weights:
+				self.yolov8_seg = YOLO(self.yolo_seg_weights)
+     
+		# Initialize DeepSORT trackers for each players and referee (TODO: get rid of deepsort for single images)
+		player_tracker = DeepSort(self.deepsort_weights, self.max_cos_dist, self.nn_budget, self.max_track_age, 0)
+		referee_tracker = DeepSort(self.deepsort_weights, self.max_cos_dist, self.nn_budget, self.max_track_age, 0)
+  
+		# Get the image from the source
+		img = cv2.imread(self.source)
+  
+		# Extract the image dimensions
+		w, h = img.shape[1], img.shape[0]
+  
+		diagram = cv2.imread("diagram.png")
+  
+		frame = Frame(img, 0, w, h, self.show)
+  
+		# Detect mask
+		frame.detectMask(self.yolov8_seg)
+  
+		# Detect players and referee
+		frame.detect_image(self.yolov8, [player_tracker, referee_tracker])
+  
+		# Write the frame to the output path
+		return frame.save_img(self.save_path)
 		
-	def track(self):
+	def track(self, **override_args):
+		# Override config.json with args from command line
+		if override_args is not None:
+			yolo_prev = self.yolo_weights
+			yolo_seg_prev = self.yolo_seg_weights
+      
+			self.override_config(override_args)
+   
+			if yolo_prev != self.yolo_weights:
+				self.yolov8 = YOLO(self.yolo_weights)
+	
+			if yolo_seg_prev != self.yolo_seg_weights:
+				self.yolov8_seg = YOLO(self.yolo_seg_weights)
+     
 		# Initialize DeepSORT trackers for each players and referee
 		player_tracker = DeepSort(self.deepsort_weights, self.max_cos_dist, self.nn_budget, self.max_track_age, self.init_phase_frames)
 		referee_tracker = DeepSort(self.deepsort_weights, self.max_cos_dist, self.nn_budget, self.max_track_age, self.init_phase_frames)
@@ -135,9 +185,6 @@ class Engine():
 			# Define the codec and create VideoWriter object
 			codec = cv2.VideoWriter_fourcc(*"avc1")
 			output = cv2.VideoWriter(self.save_path, codec, fps, (w, h))
-
-		# Initialise variables for tracking
-		total_time = 0
 	
 		# Queue for storing previous frames for optical flow
 		queue = deque()

@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 from utils.deepsort import DeepSort
+from deepsort.track import Track
 from ultralytics import YOLO
 
 from sklearn.cluster import KMeans
@@ -12,6 +13,15 @@ COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
 
 # grey, pastel blue, pastel red for referees, team A, team B
 BOX_COLORS = [(128, 128, 128), (128, 128, 255), (255, 128, 128)]
+
+class PsuedoTrack():
+    def __init__(self, xyxy, track_id):
+        self.to_tlbr = lambda: xyxy
+        
+        self.track_id = track_id
+        
+        self.team = 0
+        self.prev_teams = []
 
 class Frame():
 	def __init__(self, img, n, w, h, show):
@@ -102,6 +112,35 @@ class Frame():
    
 			self.players = self.splitTeams(prev_players, self.players)
    
+			self.plotTracks(self.referees, BOX_COLORS, ['Referee'])
+			self.plotTracks(self.players, BOX_COLORS[1:], ['Team A', 'Team B'])
+   
+	def detect_image(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
+		# Use YOLO to detect players and referees
+		results = yoloWrapper(
+			source = self.orig_img,
+			verbose = False
+		)
+  
+		detections = results[0].cpu().numpy().boxes
+  
+		if detections is not None:
+			# Split detections into bboxes, scores and classes
+			bboxes, classes = detections.xyxy, detections.cls
+
+			classes = classes.flatten().astype(int)
+
+			player_boxes = bboxes[classes == 0]
+			ref_boxes = bboxes[classes == 1]
+   
+			for i, xyxy in enumerate(player_boxes):
+				self.players.append(PsuedoTrack(xyxy, i))
+    
+			for i, xyxy in enumerate(ref_boxes):
+				self.referees.append(PsuedoTrack(xyxy, i))
+    
+			self.players = self.splitTeams([], self.players)
+
 			self.plotTracks(self.referees, BOX_COLORS, ['Referee'])
 			self.plotTracks(self.players, BOX_COLORS[1:], ['Team A', 'Team B'])
 	
@@ -461,6 +500,27 @@ class Frame():
 	
 		# Clear some memory
 		self.clearMemory()
+  
+	def save_img(self, path: str):
+		# Check if frame has 4 corners
+		if len(self.corners) == 4:
+			self.diagram = cv2.imread("diagram.jpg")
+			
+			self.diagram = self.applyHomography(self.diagram)
+   
+			# Calculate scale needed (diagram width/frame width)
+			scale = self.img.shape[1] / self.diagram.shape[1] / 2.5
+   
+			# Place a downsized version of the diagram in the top right corner of the frame
+			small_diagram = cv2.resize(self.diagram, (0, 0), fx = scale, fy = scale)
+   
+			# Add the diagram to the top right corner of the frame
+			self.img[:small_diagram.shape[0], -small_diagram.shape[1]:] = small_diagram
+   
+		# Save the frame
+		cv2.imwrite(path, self.img)
+  
+		return self.img
 
 def updateCorners(Frame1: Frame, Frame2: Frame):
 	if len(Frame1.corners) == 1:
