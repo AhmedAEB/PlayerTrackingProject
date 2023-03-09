@@ -115,7 +115,7 @@ class Frame():
 			self.plotTracks(self.referees, BOX_COLORS, ['Referee'])
 			self.plotTracks(self.players, BOX_COLORS[1:], ['Team A', 'Team B'])
    
-	def detect_image(self, yoloWrapper: YOLO, trackers: List[DeepSort]):
+	def detect_image(self, yoloWrapper: YOLO):
 		# Use YOLO to detect players and referees
 		results = yoloWrapper(
 			source = self.orig_img,
