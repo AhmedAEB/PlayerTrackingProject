@@ -130,7 +130,6 @@ def run(opt):
 				qframe = queue[i]
 				updateCorners(qframe, next_frame)
 				next_frame = qframe
-				sub_progress_bar.update(1)
 		else:
 			queue.appendleft(prev_frame)
    
@@ -165,7 +164,7 @@ if __name__ == "__main__":
 	parser.add_argument("--iou_th", type=float, default=0.2, help="IOU threshold for non-max suppression")
 	parser.add_argument("--conf_th", type=float, default=0.2, help="Confidence threshold for non-max suppression")
 	parser.add_argument("--max_track_age", type=int, default=300, help="Maximum number of frames to keep a track alive")
-	parser.add_argument("--init_phase_frames", type=int, default=6, help="Number of frames a track is initialised for")
+	parser.add_argument("--init_phase_frames", type=int, default=10, help="Number of frames a track is initialised for")
  
 	# YOLOv7 Segmentation Hyperparameters
 	parser.add_argument("--conf_th_seg", type=float, default=0.5, help="Confidence threshold for segmentation")

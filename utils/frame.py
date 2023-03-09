@@ -400,11 +400,10 @@ class Frame():
     
         # Calculate final team for each track based on team prediction history
         for track in tracks:
-            if len(track.prev_teams) < 20:
-                track.prev_teams.append(track.team)
+            track.prev_teams.append(track.team)
         
-            # Set the team to the most common team in the last n frames
-            track.team = max(set(track.prev_teams), key = track.prev_teams.count)
+            # Set the team to the most common team in the last 20 frames
+            track.team = max(set(track.prev_teams[-20:]), key = track.prev_teams[-20:].count)
     
         return tracks
         
