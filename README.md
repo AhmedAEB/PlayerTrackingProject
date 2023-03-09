@@ -1,4 +1,8 @@
-# playertracking
+# Player Tracking Project
+
+## Installation
+
+### Step 1: Install Anaconda and Setup condarc as follows:
 ```shell
 cd
 nano .condarc
@@ -12,23 +16,19 @@ channels:
 channel_priority: strict
 ```
 
+### Step 2: Create conda environment
 ```shell
-conda create -yn <env_name> python=3.8
+conda create -yn <env_name> pip
 conda activate <env_name>
 ```
-MacOS:
-```shell
-conda install pytorch torchvision torchaudio -yc pytorch
-```
-Linux Cuda 11.6:
-```shell
-conda install pytorch torchvision torchaudio pytorch-cuda=11.6 -c pytorch -c nvidia
-```
-```shell
-conda install -y numpy opencv tensorflow matplotlib pandas tqdm scikit-learn pyyaml seaborn onnx
-```
 
-Then Run:
+### Step 3: Install pytorch (based on your system)
+https://pytorch.org/get-started/locally/
+
+### Step 4: Install Yolo
+```pip3 install ultralytics```
+
+### Step 5: Run & Enjoy ☺️
 ```shell
-python track.py
+python3 main-gui.py
 ```
