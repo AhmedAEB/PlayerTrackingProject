@@ -130,6 +130,10 @@ class Engine():
 	
 			if yolo_seg_prev != self.yolo_seg_weights:
 				self.yolov8_seg = YOLO(self.yolo_seg_weights)
+    
+		# Assert that the image is not a video
+		assert not self.source.endswith(".mp4"), "Please use track() for videos or use a different source"
+		assert not self.save_path.endswith(".mp4"), "Please use track() for videos or use a different save_path"
      
 		# Initialize DeepSORT trackers for each players and referee (TODO: get rid of deepsort for single images)
 		player_tracker = DeepSort(self.deepsort_weights, self.max_cos_dist, self.nn_budget, self.max_track_age, 0)
