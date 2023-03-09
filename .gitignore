@@ -136,6 +136,7 @@ dmypy.json
 data
 weights
 runs
+backupWeights
 
 # Mac OS
 .DS_Store

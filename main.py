@@ -1,92 +1,16 @@
-import tkinter as tk
 from time import perf_counter
 
 from utils.engine import Engine
- 
-# Run detection on image
-# img = engine.detect_image(
-# 	source="./data/input2.png",
-# 	save_path="./data/output2.png",
-#   save=True,
-# )
 
-# Initialize engine
-engine = Engine(
-    show = True,
-)
-
-def run():
+if __name__ == "__main__":
     # Store start time
     start = perf_counter()
 
-    # Get values from entries
-    source = source_entry.get()
-    save_path = save_path_entry.get()
-    nframes = int(nframes_entry.get())
-    nframes = nframes if nframes != -1 else None
-    skip_frames = int(skip_frames_entry.get())
-    
-    # Disable button and change text to "Processing..."
-    run_button.config(text="Processing...", state="disabled")
-    root.update()
+    # Initialize engine
+    engine = Engine()
 
     # Run tracking
-    engine.track(
-        source = source,
-        save_path = save_path,
-        nframes = nframes,
-        skip_frames = skip_frames,
-        show = show.get(),
-    )
-    
-    # Enable button and change text to "Run"
-    run_button.config(text="Run", state="normal")
-    
+    engine.track()
+
     # Print time taken to run
     print(f"Time taken: {perf_counter()-start:.2f} s")
-
-root = tk.Tk()
-root.title("🏀 - Player Tracking Project")
-
-# Make window non-resizable
-root.resizable(False, False)
-
-# Make background white
-root.configure(background="white")
-
-# Create widgets
-source_label = tk.Label(root, text="Source:", bg="white")
-source_entry = tk.Entry(root, highlightthickness=1, border=1)
-source_entry.insert(0, "./data/input.mp4")
-save_path_label = tk.Label(root, text="Save Path:", bg="white")
-save_path_entry = tk.Entry(root, highlightthickness=1, border=1)
-save_path_entry.insert(0, "./data/output.mp4")
-nframes_label = tk.Label(root, text="Number of Frames:", bg="white")
-nframes_entry = tk.Entry(root, highlightthickness=1, border=1)
-nframes_entry.insert(0, "-1")
-skip_frames_label = tk.Label(root, text="Frames to Skip:", bg="white")
-skip_frames_entry = tk.Entry(root, highlightthickness=1, border=1)
-skip_frames_entry.insert(0, "0")
-
-# Create a checkbox to show the output
-show = tk.BooleanVar()
-show_label = tk.Label(root, text="Show Process:", bg="white")
-show_checkbox = tk.Checkbutton(root, bg="white", onvalue=True, offvalue=False, variable=show)
-
-run_button = tk.Button(root, text="Run", command=run, highlightbackground="white")
-
-# Place widgets
-source_label.grid(row=0, column=0)
-source_entry.grid(row=0, column=1)
-save_path_label.grid(row=1, column=0)
-save_path_entry.grid(row=1, column=1)
-nframes_label.grid(row=2, column=0)
-nframes_entry.grid(row=2, column=1)
-skip_frames_label.grid(row=3, column=0)
-skip_frames_entry.grid(row=3, column=1)
-show_label.grid(row=4, column=0)
-show_checkbox.grid(row=4, column=1, sticky="w")
-run_button.grid(row=5, column=0, columnspan=2)
-
-# Run mainloop
-root.mainloop()
