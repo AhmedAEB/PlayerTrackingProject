@@ -1,16 +1,15 @@
-import argparse
-from os import path
-from time import perf_counter
-from tqdm import trange
-
 import cv2
+import argparse
 import numpy as np
+from os import path
+from tqdm import trange
 from collections import deque
+from time import perf_counter
 
 from utils.deepsort import DeepSort
-from utils.frame import Frame, updateCorners
-
 from ultralytics import YOLO
+
+from utils.frame import Frame, updateCorners
 
 def run(opt):
 	# Debugging Arguments
