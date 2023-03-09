@@ -5,10 +5,9 @@ from deepsort.track import Track
 from deepsort.tracker import Tracker
 
 class DeepSort():
-	def __init__(self, deepsort_weights, cosine_thresh, nn_budget, max_track_age, init_phase_frames, colour):
+	def __init__(self, deepsort_weights, cosine_thresh, nn_budget, max_track_age, init_phase_frames):
 		self.encoder = create_box_encoder(deepsort_weights, batch_size=1)
 		self.tracker = Tracker(NearestNeighborDistanceMetric("euclidean", cosine_thresh, nn_budget), max_age=max_track_age, n_init=init_phase_frames)
-		self.colour = colour
 
 	def update(self, frame, bboxes, scores):
 		tracks = []
