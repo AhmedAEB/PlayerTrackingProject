@@ -1,7 +1,7 @@
 import argparse
 from os import path
 from time import perf_counter
-from tqdm import tqdm
+from tqdm import trange
 
 import cv2
 import numpy as np
@@ -22,15 +22,13 @@ def run(opt):
 	# Get hyperparameters
 	max_cos_dist, nn_budget, iou_th, conf_th, iou_th_seg, conf_th_seg, max_track_age, init_phase_frames = opt.max_cos_dist, opt.nn_budget, opt.iou_th, opt.conf_th, opt.iou_th_seg, opt.conf_th_seg, opt.max_track_age, opt.init_phase_frames
 
-	# Initialise YOLO wrapper for player and referee detection
+	# Initialise YOLO for (player + referee detection) and (court instance segmentation)
 	yolov8 = YOLO(yolo_weights)
+	yolov8_seg = YOLO(yolo_seg_weights)
 
 	# initialize DeepSORT trackers for each players and referee
 	player_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, colour=(0, 255, 0))
 	referee_tracker = DeepSort(deepsort_weights, max_cos_dist, nn_budget, max_track_age, init_phase_frames, colour=(128, 128, 128))
-
-	# Initialise YoloV7 Instance Segmentation wrapper for court detection
-	yolov8_seg = YOLO(yolo_seg_weights)
 
 	# Get the video from the source
 	video = cv2.VideoCapture(source)
@@ -70,8 +68,7 @@ def run(opt):
 	diagram_empty = cv2.imread('diagram.jpg')
 
 	# Loop through all frames
-	progress_bar = tqdm(total=total_frames, desc="Processing...", unit="frames")
-	for i in range(total_frames):
+	for i in trange(total_frames, desc="Processing...", unit="frames"):
 		# Start timer for current frame
 		start = perf_counter()
   
@@ -138,7 +135,6 @@ def run(opt):
 				diagram = diagram_empty.copy(),
 				output = output,
 			)
-			progress_bar.update(1)
 
 		prev_frame = frame
    
