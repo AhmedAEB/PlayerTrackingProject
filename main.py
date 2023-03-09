@@ -69,9 +69,6 @@ def run(opt):
 
 	# Loop through all frames
 	for i in trange(total_frames, desc="Processing...", unit="frames"):
-		# Start timer for current frame
-		start = perf_counter()
-  
 		# Check if video has ended
 		if not ret:
 			break
@@ -86,10 +83,6 @@ def run(opt):
   
 		# Run player and referee detection + tracking (yolov7 + deepsort)
 		frame.detectAndTrack(yolov8, [player_tracker, referee_tracker])
-					
-		# Update the time taken and increment frame count
-		total_time += perf_counter() - start
-		i += 1
   
 		# If mask is None then there is no free throw area so append frame to queue
 		if frame.n == total_frames - 1:
@@ -138,7 +131,6 @@ def run(opt):
 
 		prev_frame = frame
    
-	print(f"\nFPS: {i/total_time:.2f} Hz")
 	cv2.destroyAllWindows()
 	video.release() # Release video
 
