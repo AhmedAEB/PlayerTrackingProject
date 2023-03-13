@@ -3,8 +3,7 @@ from typing import List
 import cv2
 import numpy as np
 
-from utils.deepsort import DeepSort
-from deepsort.track import Track
+from utils.deepsort import DeepSort, BTrack
 from ultralytics import YOLO
 
 from sklearn.cluster import KMeans
@@ -14,15 +13,6 @@ CORNER_COLOURS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
 TEAM_A_COLOUR = (128, 128, 255)  # pastel blue
 TEAM_B_COLOUR = (255, 128, 128)  # pastel red
 REFEREE_COLOUR = (128, 128, 128) # grey
-
-class PsuedoTrack():
-	def __init__(self, xyxy, track_id):
-		self.to_tlbr = lambda: xyxy
-
-		self.track_id = track_id
-
-		self.team = 0
-		self.prev_teams = []
 
 
 class Frame():
@@ -160,10 +150,10 @@ class Frame():
 			ref_boxes = bboxes[classes == 1]
 
 			for i, xyxy in enumerate(player_boxes):
-				self.players.append(PsuedoTrack(xyxy, i))
+				self.players.append(BTrack.fake_track(xyxy, i))
 
 			for i, xyxy in enumerate(ref_boxes):
-				self.referees.append(PsuedoTrack(xyxy, i))
+				self.referees.append(BTrack.fake_track(xyxy, i))
 
 			self.players = self.splitTeams([], self.players)
 

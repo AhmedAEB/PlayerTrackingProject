@@ -164,14 +164,17 @@ class Engine():
 		img = cv2.imread(self.source)
 
 		# Extract the image dimensions
-		w, h = img.shape[1], img.shape[0]
+		self.w, self.h = img.shape[1], img.shape[0]
 
 		diagram = cv2.imread("diagram.png")
 
-		frame = Frame(img, 0, w, h, self.show)
+		frame = Frame(img, 0, self)
 
-		# Detect mask
-		frame.detectMask()
+		# Get corners of free throw area if it exists
+		frame.getCorners()
+
+		# Use yolov8 to detect players and referee
+		detection = frame.detect()
 
 		# Detect players and referee
 		frame.detect_image()
