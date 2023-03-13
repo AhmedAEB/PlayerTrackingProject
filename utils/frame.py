@@ -9,11 +9,11 @@ from ultralytics import YOLO
 
 from sklearn.cluster import KMeans
 
-COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
-
-# grey, pastel blue, pastel red for referees, team A, team B
-BOX_COLORS = [(128, 128, 128), (128, 128, 255), (255, 128, 128)]
-
+# Colour constants for plotting tracks
+CORNER_COLOURS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
+TEAM_A_COLOUR = (128, 128, 255)  # pastel blue
+TEAM_B_COLOUR = (255, 128, 128)  # pastel red
+REFEREE_COLOUR = (128, 128, 128) # grey
 
 class PsuedoTrack():
 	def __init__(self, xyxy, track_id):
@@ -138,8 +138,8 @@ class Frame():
 			# Apply team classification to players
 			self.players = self.splitTeams(prev_players, self.players)
 
-			self.plotTracks(self.referees, BOX_COLORS, ['Referee'])
-			self.plotTracks(self.players, BOX_COLORS[1:], ['Team A', 'Team B'])
+			self.plotTracks(self.referees, [REFEREE_COLOUR], ['Referee'])
+			self.plotTracks(self.players, [TEAM_A_COLOUR, TEAM_B_COLOUR], ['Team A', 'Team B'])
 
 	def detect_image(self):
 		# Use YOLO to detect players and referees
@@ -167,8 +167,8 @@ class Frame():
 
 			self.players = self.splitTeams([], self.players)
 
-			self.plotTracks(self.referees, BOX_COLORS, ['Referee'])
-			self.plotTracks(self.players, BOX_COLORS[1:], ['Team A', 'Team B'])
+			self.plotTracks(self.referees, [REFEREE_COLOUR], ['Referee'])
+			self.plotTracks(self.players, [TEAM_A_COLOUR, TEAM_B_COLOUR], ['Team A', 'Team B'])
 
 	def getCorners(self):
 		# Use yolo to detect the free throw area
@@ -297,7 +297,7 @@ class Frame():
 
 		# Display the corners on the image
 		for i, corner in enumerate(self.corners):
-			cv2.circle(self.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
+			cv2.circle(self.img, tuple(corner.astype(int)), 5, CORNER_COLOURS[i], -1)
 
 	def applyHomography(self, diagram: np.ndarray):
 		# if corners or diagram corners are not set, return
@@ -321,10 +321,13 @@ class Frame():
 
 			# Transform the player's position
 			xy = cv2.perspectiveTransform(xy, M)[0][0]
+   
+			# Get the player's team COLOUR
+			COLOUR = [TEAM_A_COLOUR, TEAM_B_COLOUR][track.team]
 
 			# Draw the player's position on the diagram based on their team
 			cv2.circle(diagram, tuple(xy.astype(int)),
-					   15, BOX_COLORS[track.team + 1], -1)
+					   15, COLOUR, -1)
 
 		# Do the same for the referees
 		for track in self.referees:
@@ -341,13 +344,13 @@ class Frame():
 			# Transform the referee's position
 			xy = cv2.perspectiveTransform(xy, M)[0][0]
 
-			# Draw the referee's position on the diagram based on their team
+			# Draw the referee's position on the diagram
 			cv2.circle(diagram, tuple(xy.astype(int)),
-					   15, BOX_COLORS[track.team], -1)
+					   15, REFEREE_COLOUR, -1)
 
 		# Display corners on diagram
 		for i, corner in enumerate(self.diagram_corners):
-			cv2.circle(diagram, tuple(corner.astype(int)), 10, COLORS[i], -1)
+			cv2.circle(diagram, tuple(corner.astype(int)), 10, CORNER_COLOURS[i], -1)
 
 		return diagram
 
@@ -494,8 +497,8 @@ class Frame():
 				continue  # Skip the corner if it is not within the frame
 			cv2.circle(
 				self.flow_frame, tuple(
-					corner.astype(int)), 5, COLORS[i], -1)
-			cv2.circle(self.img, tuple(corner.astype(int)), 5, COLORS[i], -1)
+					corner.astype(int)), 5, CORNER_COLOURS[i], -1)
+			cv2.circle(self.img, tuple(corner.astype(int)), 5, CORNER_COLOURS[i], -1)
 
 	def saveFrame(
 			self,
