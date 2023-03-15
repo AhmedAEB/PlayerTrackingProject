@@ -14,7 +14,7 @@ if __name__ == "__main__":
 	
 	# Run detection on image
 	# img = engine.detect_image(
-	# 	source="./data/football.png",
+	# 	source="./data/input.png",
 	# 	save_path="./data/output2.png",
 	#   	save=True,
 	# )

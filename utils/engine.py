@@ -9,7 +9,7 @@ from collections import deque
 from utils.deepsort import DeepSort
 from ultralytics import YOLO
 
-from utils.frame import Frame, updateCorners
+from utils.frame import Frame
 
 
 class Engine():
@@ -40,6 +40,9 @@ class Engine():
 		self.yolov8 = YOLO(self.yolo_weights)
 		# For instance segmentation on free throw area
 		self.yolov8_seg = YOLO(self.yolo_seg_weights)
+  
+		# Load diagram
+		self.diagram = cv2.imread("diagram.jpg")
 
 	def load_config(self, path):
 		# Load config.json
@@ -139,9 +142,8 @@ class Engine():
 			default=self.iou_th_seg,
 			help="IOU threshold for segmentation"
 		)
-
-	def detect_image(self, **override_args):
-		# Override config.json with args from command line
+  
+	def override_and_load_yolo(self, override_args):
 		if override_args is not None:
 			yolo_prev = self.yolo_weights
 			yolo_seg_prev = self.yolo_seg_weights
@@ -154,6 +156,9 @@ class Engine():
 			if yolo_seg_prev != self.yolo_seg_weights:
 				self.yolov8_seg = YOLO(self.yolo_seg_weights)
 
+	def detect_image(self, **override_args):
+		self.override_and_load_yolo(override_args)
+
 		# Assert that the image is not a video
 		assert not self.source.endswith(
 			".mp4"), "Please use track() for videos or use a different source"
@@ -165,8 +170,6 @@ class Engine():
 
 		# Extract the image dimensions
 		self.w, self.h = img.shape[1], img.shape[0]
-
-		diagram = cv2.imread("diagram.png")
 
 		frame = Frame(img, 0, self)
 
@@ -183,18 +186,7 @@ class Engine():
 		return frame.save_img(self.save_path)
 
 	def track(self, **override_args):
-		# Override config.json with args from command line
-		if override_args is not None:
-			yolo_prev = self.yolo_weights
-			yolo_seg_prev = self.yolo_seg_weights
-
-			self.override_config(override_args)
-
-			if yolo_prev != self.yolo_weights:
-				self.yolov8 = YOLO(self.yolo_weights)
-
-			if yolo_seg_prev != self.yolo_seg_weights:
-				self.yolov8_seg = YOLO(self.yolo_seg_weights)
+		self.override_and_load_yolo(override_args)
 
 		# Initialize DeepSORT trackers for each players and referee
 		self.player_tracker = DeepSort(
@@ -211,9 +203,6 @@ class Engine():
 			self.max_track_age,
 			self.init_phase_frames
 		)
-
-		# Read diagram image
-		diagram_empty = cv2.imread('diagram.jpg')
 
 		# Get the video from the source
 		video = cv2.VideoCapture(self.source)
@@ -263,12 +252,9 @@ class Engine():
 
 			# Get corners of free throw area if it exists
 			frame.getCorners()
-
-			# Use yolov8 to detect players and referee
-			detection = frame.detect()
    
 			# Update deepsort trackers for players and referee + plot tracks
-			frame.track(detection)
+			frame.track()
 
 			# If mask is None then there is no free throw area so append frame
 			# to queue
@@ -285,7 +271,7 @@ class Engine():
 				next_frame = frame
 				for i in range(len(queue) - 1, -1, -1):
 					qframe = queue[i]
-					updateCorners(qframe, next_frame)
+					Frame.updateCorners(qframe, next_frame)
 					next_frame = qframe
 			elif len(frame.corners) != 4:
 				# Only do forward optical flow from previous frame to current
@@ -293,7 +279,7 @@ class Engine():
 				queue.appendleft(prev_frame)
 				for i in range(1, len(queue)):
 					qframe = queue[i]
-					updateCorners(qframe, prev_frame)
+					Frame.updateCorners(qframe, prev_frame)
 					prev_frame = qframe
 			elif len(queue) > 0:
 				# If both frames have corners then do half forward and half
@@ -301,14 +287,14 @@ class Engine():
 				queue.appendleft(prev_frame)
 				for i in range(1, len(queue) // 2):
 					qframe = queue[i]
-					updateCorners(qframe, prev_frame)
+					Frame.updateCorners(qframe, prev_frame)
 					prev_frame = qframe
 
 				# For the rest do backward optical flow
 				next_frame = frame
 				for i in range(len(queue) - 1, len(queue) // 2 - 1, -1):
 					qframe = queue[i]
-					updateCorners(qframe, next_frame)
+					Frame.updateCorners(qframe, next_frame)
 					next_frame = qframe
 			else:
 				queue.appendleft(prev_frame)
@@ -317,10 +303,7 @@ class Engine():
 				f = queue.popleft()
 
 				if self.save or self.show:
-					f.saveFrame(
-						diagram=diagram_empty.copy(),
-						output=output,
-					)
+					f.saveFrame(output=output)
 
 			prev_frame = frame
 

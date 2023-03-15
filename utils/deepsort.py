@@ -32,7 +32,7 @@ class BTracker(Tracker):
 	def _initiate_track(self, detection):
 		mean, covariance = self.kf.initiate(detection.to_xyah())
 		self.tracks.append(
-			BTrack( # <-- This is the only change
+			BTrack( # Change the track class to BTrack
 				mean, 
 			 	covariance,
 			  	self._next_id,

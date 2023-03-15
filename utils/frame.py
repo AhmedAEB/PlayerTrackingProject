@@ -35,7 +35,7 @@ class Frame():
 		self.polygon = None
 		self.flow_frame = None
 		self.team_frame = None
-		self.diagram = None
+		self.diagram = self.engine.diagram.copy()
 
 	def clearMemory(self):
 		# Remove all unnecessary variables to free up memory
@@ -77,7 +77,7 @@ class Frame():
 				1
 			)
 
-	def detect(self):
+	def detect_players_and_referees(self):
 		# Use YOLO to detect players and referees
 		results = self.engine.yolov8(
 			source=self.orig_img,
@@ -87,7 +87,10 @@ class Frame():
 		# Return the detection as a Result object
 		return results[0].cpu().numpy()
 	
-	def track(self, detection):
+	def track(self):
+		# Use yolov8 to detect players and referee
+		detection = self.detect_players_and_referees()
+     
 		if detection.boxes is not None:
 			boxes = detection.boxes
 
@@ -133,12 +136,7 @@ class Frame():
 
 	def detect_image(self):
 		# Use YOLO to detect players and referees
-		results = self.engine.yolov8(
-			source=self.orig_img,
-			verbose=False
-		)
-
-		detections = results[0].cpu().numpy().boxes
+		detection = self.detect_players_and_referees()
 
 		if detections is not None:
 			# Split detections into bboxes, scores and classes
@@ -492,7 +490,6 @@ class Frame():
 
 	def saveFrame(
 			self,
-			diagram: np.ndarray,
 			output: cv2.VideoWriter,
 			show: bool = False):
 		# Run some validation checks on the frame
@@ -529,14 +526,14 @@ class Frame():
 		)
 
 		# Get the homography for the current frame
-		self.diagram = self.applyHomography(diagram)
+		self.diagram = self.applyHomography(self.diagram)
 
 		# Calculate scale needed (diagram width/frame width)
 		scale = self.img.shape[1] / self.diagram.shape[1] / 2.5
 
 		# Place a downsized version of the diagram in the top right corner of
 		# the frame
-		small_diagram = cv2.resize(diagram, (0, 0), fx=scale, fy=scale)
+		small_diagram = cv2.resize(self.diagram, (0, 0), fx=scale, fy=scale)
 
 		# Add the diagram to the top right corner of the frame
 		self.img[:small_diagram.shape[0], -
@@ -577,9 +574,7 @@ class Frame():
 	def save_img(self, path: str):
 		# Check if frame has 4 corners
 		if len(self.corners) == 4:
-			self.diagram = cv2.imread("diagram.jpg")
-
-			self.diagram = self.applyHomography(self.diagram)
+			self.diagram = self.applyHomography(self.engine.diagram.copy())
 
 			# Calculate scale needed (diagram width/frame width)
 			scale = self.img.shape[1] / self.diagram.shape[1] / 2.5
@@ -598,94 +593,94 @@ class Frame():
 
 		return self.img
 
-
-def updateCorners(Frame1: Frame, Frame2: Frame):
-	if len(Frame1.corners) == 1:
-		if Frame1.side == "left":
-			# Compare the top right corner of Frame2 (frame [1]) with the
-			# corner of Frame1
-			movement = Frame2.corners[1] - Frame1.corners[0]
-			Frame1.corners = Frame2.corners.copy()
-			for i in range(len(Frame1.corners)):
-				Frame1.corners[i] -= movement
-		else:
-			# Compare the top left corner of Frame2 (frame [0]) with the corner
-			# of Frame1
-			movement = Frame2.corners[0] - Frame1.corners[0]
-			Frame1.corners = Frame2.corners.copy()
-			for i in range(len(Frame1.corners)):
-				Frame1.corners[i] -= movement
-		Frame1.diagram_corners = Frame2.diagram_corners.copy()
-
-		Frame1.plotCorners()
-		return
-
-	frame1_img = Frame1.orig_img.copy()
-	frame2_img = Frame2.orig_img.copy()
-
-	# Apply canny edge detection to the curr and next frames
-	frame1_img = cv2.Canny(frame1_img, 100, 200)
-	frame2_img = cv2.Canny(frame2_img, 100, 200)
-
-	# Calculate optical flow
-	flow = cv2.calcOpticalFlowFarneback(
-		frame2_img, frame1_img, None, 0.5, 10, 30, 3, 5, 1.5, 0)
-
-	# Create a flow frame to display the flow vectors
-	Frame1.flow_frame = Frame1.orig_img.copy()
-
-	# Reset flow vectors around detected players and referees
-	flow = Frame1.remove_tracks(flow)
-
-	# Reset top & bottom 15% of flow vectors
-	flow[:int(flow.shape[0] * 0.15), :, :] = 0
-	flow[int(flow.shape[0] * 0.85):, :, :] = 0
-
-	# Calculate the average x and y movement ignoring vectors with magnitude
-	# less than 1
-	avg_movement = np.array([0, 0], dtype=np.float32)
-	count = 1
-
-	# Loop through each pixel in the flow
-	for y in range(0, flow.shape[0], 10):
-		for x in range(0, flow.shape[1], 10):
-			# Get the flow vector
-			fx, fy = flow[y, x]
-
-			# If the magnitude of the flow vector is greater than 1, add it to
-			# the average movement
-			if np.sqrt(fx ** 2 + fy ** 2) > 1.5:
-				avg_movement += np.array([fx, fy], dtype=np.float32)
-				count += 1
-
-			# Draw the flow vector in red if moving right, blue if moving left
-			if fx > 0:
-				cv2.line(Frame1.flow_frame, (x, y),
-						 (x + int(fx), y + int(fy)), (0, 0, 255), 1)
+	@staticmethod
+	def updateCorners(frame1, frame2):
+		if len(frame1.corners) == 1:
+			if frame1.side == "left":
+				# Compare the top right corner of frame2 (frame [1]) with the
+				# corner of frame1
+				movement = frame2.corners[1] - frame1.corners[0]
+				frame1.corners = frame2.corners.copy()
+				for i in range(len(frame1.corners)):
+					frame1.corners[i] -= movement
 			else:
-				cv2.line(Frame1.flow_frame, (x, y),
-						 (x + int(fx), y + int(fy)), (255, 0, 0), 1)
+				# Compare the top left corner of frame2 (frame [0]) with the corner
+				# of frame1
+				movement = frame2.corners[0] - frame1.corners[0]
+				frame1.corners = frame2.corners.copy()
+				for i in range(len(frame1.corners)):
+					frame1.corners[i] -= movement
+			frame1.diagram_corners = frame2.diagram_corners.copy()
 
-	if Frame1.engine.show:
-		cv2.imshow("Flow", Frame1.flow_frame)
+			frame1.plotCorners()
+			return
 
-	# Divide the average movement by the number of vectors to get the average
-	# movement
-	avg_movement /= count
+		frame1_img = frame1.orig_img.copy()
+		frame2_img = frame2.orig_img.copy()
 
-	# Take a copy of the next frame's corners and increment their age
-	Frame1.corners = Frame2.corners.copy()
-	Frame1.diagram_corners = Frame2.diagram_corners.copy()
+		# Apply canny edge detection to the curr and next frames
+		frame1_img = cv2.Canny(frame1_img, 100, 200)
+		frame2_img = cv2.Canny(frame2_img, 100, 200)
 
-	Frame1.corners_age = Frame2.corners_age + 1
+		# Calculate optical flow
+		flow = cv2.calcOpticalFlowFarneback(
+			frame2_img, frame1_img, None, 0.5, 10, 30, 3, 5, 1.5, 0)
 
-	# Increase avg_movement proportional to the age of the corners
-	# avg_movement *= (Frame1.corners_age ** 1.09) * 0.001 + 1
+		# Create a flow frame to display the flow vectors
+		frame1.flow_frame = frame1.orig_img.copy()
 
-	# Update corners with average movement
-	avg_movement = avg_movement.astype(int)
+		# Reset flow vectors around detected players and referees
+		flow = frame1.remove_tracks(flow)
 
-	for i in range(len(Frame1.corners)):
-		Frame1.corners[i] += avg_movement
+		# Reset top & bottom 15% of flow vectors
+		flow[:int(flow.shape[0] * 0.15), :, :] = 0
+		flow[int(flow.shape[0] * 0.85):, :, :] = 0
 
-	Frame1.plotCorners()
+		# Calculate the average x and y movement ignoring vectors with magnitude
+		# less than 1
+		avg_movement = np.array([0, 0], dtype=np.float32)
+		count = 1
+
+		# Loop through each pixel in the flow
+		for y in range(0, flow.shape[0], 10):
+			for x in range(0, flow.shape[1], 10):
+				# Get the flow vector
+				fx, fy = flow[y, x]
+
+				# If the magnitude of the flow vector is greater than 1, add it to
+				# the average movement
+				if np.sqrt(fx ** 2 + fy ** 2) > 1.5:
+					avg_movement += np.array([fx, fy], dtype=np.float32)
+					count += 1
+
+				# Draw the flow vector in red if moving right, blue if moving left
+				if fx > 0:
+					cv2.line(frame1.flow_frame, (x, y),
+							(x + int(fx), y + int(fy)), (0, 0, 255), 1)
+				else:
+					cv2.line(frame1.flow_frame, (x, y),
+							(x + int(fx), y + int(fy)), (255, 0, 0), 1)
+
+		if frame1.engine.show:
+			cv2.imshow("Flow", frame1.flow_frame)
+
+		# Divide the average movement by the number of vectors to get the average
+		# movement
+		avg_movement /= count
+
+		# Take a copy of the next frame's corners and increment their age
+		frame1.corners = frame2.corners.copy()
+		frame1.diagram_corners = frame2.diagram_corners.copy()
+
+		frame1.corners_age = frame2.corners_age + 1
+
+		# Increase avg_movement proportional to the age of the corners
+		# avg_movement *= (frame1.corners_age ** 1.09) * 0.001 + 1
+
+		# Update corners with average movement
+		avg_movement = avg_movement.astype(int)
+
+		for i in range(len(frame1.corners)):
+			frame1.corners[i] += avg_movement
+
+		frame1.plotCorners()
