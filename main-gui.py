@@ -91,17 +91,22 @@ run_button = tk.Button(
     highlightbackground="white")
 
 # Place widgets
-source_label.grid(row=0, column=0)
-source_entry.grid(row=0, column=1)
-save_path_label.grid(row=1, column=0)
-save_path_entry.grid(row=1, column=1)
-nframes_label.grid(row=2, column=0)
-nframes_entry.grid(row=2, column=1)
-skip_frames_label.grid(row=3, column=0)
-skip_frames_entry.grid(row=3, column=1)
-show_label.grid(row=4, column=0)
+source_label.grid(row=0, column=0, sticky="w")
+source_entry.grid(row=0, column=1, sticky="ew")
+
+save_path_label.grid(row=1, column=0, sticky="w")
+save_path_entry.grid(row=1, column=1, sticky="ew")
+
+nframes_label.grid(row=2, column=0, sticky="w")
+nframes_entry.grid(row=2, column=1, sticky="ew")
+
+skip_frames_label.grid(row=3, column=0, sticky="w")
+skip_frames_entry.grid(row=3, column=1, sticky="ew")
+
+show_label.grid(row=4, column=0, sticky="w")
 show_checkbox.grid(row=4, column=1, sticky="w")
-run_button.grid(row=5, column=0, columnspan=2)
+
+run_button.grid(row=5, column=0, columnspan=2, sticky="ew")
 
 # Make window appear in bottom right corner of screen
 gui.geometry(

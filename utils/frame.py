@@ -163,6 +163,8 @@ class Frame():
 		results = self.engine.yolov8_seg(
 			source=self.orig_img,
 			retina_masks=True,
+			max_det = 1,
+			conf = 0.8,
 			verbose=False
 		)
 
