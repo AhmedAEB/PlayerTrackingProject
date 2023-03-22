@@ -28,6 +28,7 @@ class Frame():
 		self.players = []
 		self.referees = []
 		self.diagram_corners = None
+		self.side = None
 		self.corners_age = 1e+5
 
 		# Debug frames
@@ -113,16 +114,22 @@ class Frame():
 			prev_players = self.engine.player_tracker.tracker.tracks
 
 			# Update the trackers
-			self.players = self.engine.player_tracker.update(
+			player_tracks = self.engine.player_tracker.update(
 				self.orig_img,
 				player_boxes,
 				player_scores
 			)
-			self.referees = self.engine.referee_tracker.update(
+			referee_tracks = self.engine.referee_tracker.update(
 				self.orig_img,
 				ref_boxes,
 				ref_scores
 			)
+   
+			for track in player_tracks:
+				self.players.append(BTrack.fake_track(track.to_tlbr(), track.track_id))
+    
+			for track in referee_tracks:
+				self.referees.append(BTrack.fake_track(track.to_tlbr(), track.track_id))
 
 			# Save xyxy coordinates of all detections
 			for track in self.players + self.referees:
@@ -210,6 +217,12 @@ class Frame():
 		# Draw the polygon on a blank image
 		self.polygon = np.zeros_like(self.mask)
 		cv2.drawContours(self.polygon, [polygon], 0, 255, -1)
+  
+		# Check which side has more white pixels
+		left = np.sum(self.polygon[:, :self.engine.w // 2] == 255)
+		right = np.sum(self.polygon[:, self.engine.w // 2:] == 255)
+
+		self.side = "left" if left > right else "right"
 
 	def getCornerPoints(self):
 		# Polygon is too close to the left side of the image
@@ -597,7 +610,8 @@ class Frame():
 
 	@staticmethod
 	def updateCorners(frame1, frame2):
-		if len(frame1.corners) == 1:
+		print(f"Updating corners for frame {frame1.index, frame1.side} from frame {frame2.index, frame2.side}")
+		if len(frame1.corners) == 1 and frame1.side == frame2.side:
 			if frame1.side == "left":
 				# Compare the top right corner of frame2 (frame [1]) with the
 				# corner of frame1
@@ -673,6 +687,7 @@ class Frame():
 		# Take a copy of the next frame's corners and increment their age
 		frame1.corners = frame2.corners.copy()
 		frame1.diagram_corners = frame2.diagram_corners.copy()
+		frame1.side = frame2.side
 
 		frame1.corners_age = frame2.corners_age + 1
 

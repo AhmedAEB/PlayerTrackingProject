@@ -2,115 +2,48 @@ import tkinter as tk
 from time import perf_counter
 
 from utils.engine import Engine
+from utils.gui import GUI
 
-# Run detection on image
-# img = engine.detect_image(
-# 	source="./data/input2.png",
-# 	save_path="./data/output2.png",
-#   save=True,
-# )
+def main():
+	# Store start time
+	start = perf_counter()
 
-# Initialize engine
-engine = Engine(
-    show=True,
-)
+	# Disable button and change text to "Processing..."
+	GUI.button.config(text="Processing...", state="disabled")
+	GUI.root.update()
 
+	# Run tracking using values from entries
+	ENGINE.track(
+		source = source.get(),
+		save_path = save_path.get(),
+		nframes = int(nframes.get()) if nframes.get() != "-1" else None,
+		skip_frames = int(skip_frames.get()),
+		show = show.get(),
+		# gui = gui,
+	)
 
-def run():
-    # Store start time
-    start = perf_counter()
+	# Enable button and change text to "Run"
+	GUI.button.config(text="Run", state="normal")
 
-    # Get values from entries
-    source = source_entry.get()
-    save_path = save_path_entry.get()
-    nframes = int(nframes_entry.get())
-    nframes = nframes if nframes != -1 else None
-    skip_frames = int(skip_frames_entry.get())
+	# Move gui to top
+	GUI.root.wm_attributes("-topmost", 1)
 
-    # Disable button and change text to "Processing..."
-    run_button.config(text="Processing...", state="disabled")
-    gui.update()
+	# Print time taken to run
+	print(f"Time taken: {perf_counter()-start:.2f} s")
 
-    # Run tracking
-    engine.track(
-        source=source,
-        save_path=save_path,
-        nframes=nframes,
-        skip_frames=skip_frames,
-        show=show.get(),
-        # gui = gui,
-    )
+if __name__ == "__main__":
+	# Initialize engine
+	ENGINE = Engine()
 
-    # Enable button and change text to "Run"
-    run_button.config(text="Run", state="normal")
+	# Initialize GUI
+	GUI = GUI(main)
 
-    # Move gui to top
-    gui.wm_attributes("-topmost", 1)
-
-    # Print time taken to run
-    print(f"Time taken: {perf_counter()-start:.2f} s")
-
-
-gui = tk.Tk()
-gui.title("🏀 - Player Tracking Project")
-
-# Make window non-resizable
-gui.resizable(False, False)
-
-# Make background white
-gui.configure(background="white")
-
-# Create widgets
-source_label = tk.Label(gui, text="Source:", bg="white")
-source_entry = tk.Entry(gui, highlightthickness=1, border=1)
-source_entry.insert(0, "./data/input.mp4")
-save_path_label = tk.Label(gui, text="Save Path:", bg="white")
-save_path_entry = tk.Entry(gui, highlightthickness=1, border=1)
-save_path_entry.insert(0, "./data/output.mp4")
-nframes_label = tk.Label(gui, text="Number of Frames:", bg="white")
-nframes_entry = tk.Entry(gui, highlightthickness=1, border=1)
-nframes_entry.insert(0, "-1")
-skip_frames_label = tk.Label(gui, text="Frames to Skip:", bg="white")
-skip_frames_entry = tk.Entry(gui, highlightthickness=1, border=1)
-skip_frames_entry.insert(0, "0")
-
-# Create a checkbox to show the output
-show = tk.BooleanVar()
-show_label = tk.Label(gui, text="Show Process:", bg="white")
-show_checkbox = tk.Checkbutton(
-    gui,
-    bg="white",
-    onvalue=True,
-    offvalue=False,
-    variable=show)
-
-run_button = tk.Button(
-    gui,
-    text="Run",
-    command=run,
-    highlightbackground="white")
-
-# Place widgets
-source_label.grid(row=0, column=0, sticky="w")
-source_entry.grid(row=0, column=1, sticky="ew")
-
-save_path_label.grid(row=1, column=0, sticky="w")
-save_path_entry.grid(row=1, column=1, sticky="ew")
-
-nframes_label.grid(row=2, column=0, sticky="w")
-nframes_entry.grid(row=2, column=1, sticky="ew")
-
-skip_frames_label.grid(row=3, column=0, sticky="w")
-skip_frames_entry.grid(row=3, column=1, sticky="ew")
-
-show_label.grid(row=4, column=0, sticky="w")
-show_checkbox.grid(row=4, column=1, sticky="w")
-
-run_button.grid(row=5, column=0, columnspan=2, sticky="ew")
-
-# Make window appear in bottom right corner of screen
-gui.geometry(
-    f"+{gui.winfo_screenwidth() - (gui.winfo_reqwidth() * 2)}+{gui.winfo_screenheight() - gui.winfo_reqheight()}")
-
-# Run mainloop
-gui.mainloop()
+	# Create entries
+	source = GUI.create_entry("Source", "./data/input.mp4")
+	save_path = GUI.create_entry("Save Path", "./data/output.mp4")
+	nframes = GUI.create_entry("Number of Frames", "-1")
+	skip_frames = GUI.create_entry("Frames to Skip", "0")
+	show = GUI.create_checkbox("Show Process", True)
+ 
+	# Run GUI mainloop
+	GUI.run(main)
