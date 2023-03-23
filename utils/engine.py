@@ -11,6 +11,7 @@ from ultralytics import YOLO
 
 from utils.frame import Frame
 
+DIAGRAM_PATH = "diagram.jpg"
 
 class Engine():
 	def __init__(self, mode="cli", config_file="config.json", **override_args):
@@ -42,7 +43,7 @@ class Engine():
 		self.yolov8_seg = YOLO(self.yolo_seg_weights)
   
 		# Load diagram
-		self.diagram = cv2.imread("diagram.jpg")
+		self.diagram = cv2.imread(DIAGRAM_PATH)
 
 	def load_config(self, path):
 		# Load config.json

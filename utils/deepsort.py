@@ -13,7 +13,7 @@ class BTrack(Track):
 		self.prev_teams = []
   
 	@staticmethod
-	def fake_track(xyxy, track_id):
+	def fake_track(xyxy, track_id, prev_teams = []):
 		track = BTrack(
 			mean=None,
 			covariance=None,
@@ -24,6 +24,7 @@ class BTrack(Track):
 		)
      
 		track.to_tlbr = lambda: xyxy
+		track.prev_teams = prev_teams
   
 		return track
 

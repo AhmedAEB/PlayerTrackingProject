@@ -27,7 +27,7 @@ class Frame():
 		self.xyxy = []
 		self.players = []
 		self.referees = []
-		self.diagram_corners = None
+		self.diagram_corners = []
 		self.side = None
 		self.corners_age = 1e+5
 
@@ -126,7 +126,7 @@ class Frame():
 			)
    
 			for track in player_tracks:
-				self.players.append(BTrack.fake_track(track.to_tlbr(), track.track_id))
+				self.players.append(BTrack.fake_track(track.to_tlbr(), track.track_id, track.prev_teams))
     
 			for track in referee_tracks:
 				self.referees.append(BTrack.fake_track(track.to_tlbr(), track.track_id))
@@ -304,7 +304,7 @@ class Frame():
 
 	def applyHomography(self, diagram: np.ndarray):
 		# if corners or diagram corners are not set, return
-		if self.corners is None or self.diagram_corners is None:
+		if not len(self.corners) or not len(self.diagram_corners):
 			return diagram
 
 		# Get the transformation matrix
@@ -610,7 +610,6 @@ class Frame():
 
 	@staticmethod
 	def updateCorners(frame1, frame2):
-		print(f"Updating corners for frame {frame1.index, frame1.side} from frame {frame2.index, frame2.side}")
 		if len(frame1.corners) == 1 and frame1.side == frame2.side:
 			if frame1.side == "left":
 				# Compare the top right corner of frame2 (frame [1]) with the
