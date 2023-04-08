@@ -44,6 +44,10 @@ class Engine():
   
 		# Load diagram
 		self.diagram = cv2.imread(DIAGRAM_PATH)
+  
+		# To store the kmeans model
+		self.kmeans = None
+		self.prev_players = []
 
 	def load_config(self, path):
 		# Load config.json
@@ -128,20 +132,6 @@ class Engine():
 			type=int,
 			default=self.init_phase_frames,
 			help="Number of frames a track is initialised for"
-		)
-
-		# YOLOv7 Segmentation Hyperparameters
-		self.parser.add_argument(
-			"--conf_th_seg",
-			type=float,
-			default=self.conf_th_seg,
-			help="Confidence threshold for segmentation"
-		)
-		self.parser.add_argument(
-			"--iou_th_seg",
-			type=float,
-			default=self.iou_th_seg,
-			help="IOU threshold for segmentation"
 		)
   
 	def override_and_load_yolo(self, override_args):

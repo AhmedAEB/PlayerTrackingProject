@@ -82,7 +82,9 @@ class Frame():
 		# Use YOLO to detect players and referees
 		results = self.engine.yolov8(
 			source=self.orig_img,
-			verbose=False
+			verbose=False,
+			conf = self.engine.conf_th,
+			iou = self.engine.iou_th,
 		)
 		
 		# Return the detection as a Result object
@@ -91,7 +93,7 @@ class Frame():
 	def track(self):
 		# Use yolov8 to detect players and referee
 		detection = self.detect_players_and_referees()
-     
+	 
 		if detection.boxes is not None:
 			boxes = detection.boxes
 
@@ -110,9 +112,6 @@ class Frame():
 			player_scores = scores[classes == 0]
 			ref_scores = scores[classes == 1]
 
-			# Store previous player tracks
-			prev_players = self.engine.player_tracker.tracker.tracks
-
 			# Update the trackers
 			player_tracks = self.engine.player_tracker.update(
 				self.orig_img,
@@ -127,7 +126,7 @@ class Frame():
    
 			for track in player_tracks:
 				self.players.append(BTrack.fake_track(track.to_tlbr(), track.track_id, track.prev_teams))
-    
+	
 			for track in referee_tracks:
 				self.referees.append(BTrack.fake_track(track.to_tlbr(), track.track_id))
 
@@ -136,7 +135,8 @@ class Frame():
 				self.xyxy.append(track.to_tlbr().astype(int))
 
 			# Apply team classification to players
-			self.players = self.splitTeams(prev_players, self.players)
+			self.players = self.splitTeams(self.engine.prev_players, self.players)
+			self.engine.prev_players = self.players
 
 			self.plotTracks(self.referees, [REFEREE_COLOUR], ['Referee'])
 			self.plotTracks(self.players, [TEAM_A_COLOUR, TEAM_B_COLOUR], ['Team A', 'Team B'])
@@ -416,9 +416,9 @@ class Frame():
 
 			# Adjust x and y positions to make them closer to the player's
 			# jersey
-			x1 += int(0.3 * w)
+			x1 += int(0.25 * w)
 			y1 += int(0.25 * h)
-			x2 -= int(0.4 * w)
+			x2 -= int(0.25 * w)
 			y2 -= int(0.45 * h)
 
 			# Get the cutout of the player
@@ -449,38 +449,40 @@ class Frame():
 
 		# Flatten to 2d array
 		players = players.reshape((players.shape[0], -1))
-
-		# Run a kmeans clustering algorithm on the players
-		kmeans = KMeans(
-			n_clusters=2,
-			random_state=0,
-			n_init="auto"
-		).fit(players)
+  
+		if self.engine.kmeans is None:
+			# Run a kmeans clustering algorithm on the players
+			self.engine.kmeans = KMeans(
+				n_clusters=2,
+				random_state=0,
+				n_init="auto"
+			).fit(players)
 
 		# Get the labels for each player
-		labels = kmeans.labels_
-
-		id_to_team = {}
-		for track in prev_tracks:
-			id_to_team[track.track_id] = track.team
-
-		correct = 0
-		total = 0
-
+		labels = self.engine.kmeans.predict(players)
+  
+		# id_to_team = {}
+		# correct = 0
+		# total = 0
+  
+		# for track in prev_tracks:
+		# 	id_to_team[track.track_id] = track.team
+   
 		for i, track in enumerate(tracks):
 			track.team = labels[i]
+   
+		# 	if track.track_id in id_to_team:
+		# 		if id_to_team[track.track_id] == track.team:
+		# 			correct += 1
+		# 		total += 1
 
-			if track.track_id in id_to_team:
-				if id_to_team[track.track_id] == track.team:
-					correct += 1
-				total += 1
+		# accuracy = correct / total if total > 0 else 0
 
-		accuracy = correct / total if total > 0 else 0
-
-		if accuracy < 0.5:
-			# Swap the teams if the accuracy is less than 50%
-			for track in tracks:
-				track.team = 1 - track.team
+		# if accuracy < 0.5 and len(prev_tracks) > 0:
+		# 	print("Swapped Teams")
+		# 	# Swap the teams if the accuracy is less than 50%
+		# 	for track in tracks:
+		# 		track.team = 1 - track.team
 
 		# Calculate final team for each track based on team prediction history
 		for track in tracks:
