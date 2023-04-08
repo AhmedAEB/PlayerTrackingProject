@@ -9,16 +9,14 @@
 	"save_path" : "./data/output.mp4",
 	
 	"yolo_weights" : "./weights/NinthYolo_x-nracheckpoint3.pt",
-	"iou_th" : 0.2,
-	"conf_th" : 0.2,
+	"iou_th" : 0.6,
+	"conf_th" : 0.1,
 
 	"yolo_seg_weights" : "./weights/SecondSeg.pt",
-	"conf_th_seg" : 0.5,
-	"iou_th_seg" : 0.5,
 	
 	"deepsort_weights" : "./weights/market1501.pb",
 	"max_cos_dist" : 0.4,
 	"nn_budget" : null,
 	"max_track_age" : 300,
-	"init_phase_frames": 10
+	"init_phase_frames": 15
 }
