@@ -50,8 +50,9 @@ class DeepSort():
 		self,
 		deepsort_weights,
 		cosine_thresh,
+		max_iou_distance,
 		nn_budget,
-		max_track_age,
+		max_age,
 		init_phase_frames
 	):
 		self.encoder = create_box_encoder(deepsort_weights, batch_size=1)
@@ -61,7 +62,8 @@ class DeepSort():
 				cosine_thresh,
 				nn_budget
 			),
-			max_age=max_track_age,
+			max_iou_distance=max_iou_distance,
+			max_age=max_age,
 			n_init=init_phase_frames
 		)
 
@@ -77,7 +79,7 @@ class DeepSort():
 		for track in self.tracker.tracks:
 			# Skip tracks that are not confirmed or have not been updated for a
 			# long time
-			if not track.is_confirmed() or track.time_since_update > 1:
+			if not track.is_confirmed() or track.time_since_update > 3: # TODO: mess with this value
 				continue
 
 			tracks.append(track)

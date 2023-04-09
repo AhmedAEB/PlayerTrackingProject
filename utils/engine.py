@@ -122,9 +122,9 @@ class Engine():
 			help="Confidence threshold for non-max suppression"
 		)
 		self.parser.add_argument(
-			"--max_track_age",
+			"--max_age",
 			type=int,
-			default=self.max_track_age,
+			default=self.max_age,
 			help="Maximum number of frames to keep a track alive"
 		)
 		self.parser.add_argument(
@@ -132,6 +132,12 @@ class Engine():
 			type=int,
 			default=self.init_phase_frames,
 			help="Number of frames a track is initialised for"
+		)
+		self.parser.add_argument(
+			"--deepsort_iou_th",
+			type=float,
+			default=self.deepsort_iou_th,
+			help="IOU threshold for DeepSort"
 		)
   
 	def override_and_load_yolo(self, override_args):
@@ -183,15 +189,17 @@ class Engine():
 		self.player_tracker = DeepSort(
 			self.deepsort_weights,
 			self.max_cos_dist,
+			self.deepsort_iou_th,
 			self.nn_budget,
-			self.max_track_age,
+			self.max_age,
 			self.init_phase_frames
 		)
 		self.referee_tracker = DeepSort(
 			self.deepsort_weights,
 			self.max_cos_dist,
+			self.deepsort_iou_th,
 			self.nn_budget,
-			self.max_track_age,
+			self.max_age,
 			self.init_phase_frames
 		)
 

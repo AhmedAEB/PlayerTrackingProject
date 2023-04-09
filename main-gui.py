@@ -19,6 +19,7 @@ def main():
 		nframes = int(nframes.get()) if nframes.get() != "-1" else None,
 		skip_frames = int(skip_frames.get()),
 		show = show.get(),
+		deepsort_iou_th = float(deepsort_iou.get()),
 		# gui = gui,
 	)
 
@@ -43,6 +44,7 @@ if __name__ == "__main__":
 	save_path = GUI.create_entry("Save Path", "./data/output.mp4")
 	nframes = GUI.create_entry("Number of Frames", "-1")
 	skip_frames = GUI.create_entry("Frames to Skip", "0")
+	deepsort_iou = GUI.create_entry("DeepSort IOU", "0.7")
 	show = GUI.create_checkbox("Show Process", True)
  
 	# Run GUI mainloop

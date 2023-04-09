@@ -22,7 +22,7 @@ class GUI():
 		return root
 
 	def create_entry(self, label, default):
-		label = tk.Label(self.root, text = f"{label.title()}:", bg = "white")
+		label = tk.Label(self.root, text = f"{label}:", bg = "white")
 		entry = tk.Entry(self.root, highlightthickness = 1, border = 1)
 		entry.insert(0, default)
   
