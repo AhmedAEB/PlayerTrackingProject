@@ -29,7 +29,6 @@ class Frame():
 		self.referees = []
 		self.diagram_corners = []
 		self.side = None
-		self.corners_age = 1e+5
 
 		# Debug frames
 		self.mask = None
@@ -197,8 +196,6 @@ class Frame():
 
 		# Get the corner points of the polygon
 		self.getCornerPoints()
-
-		self.corners_age = 0
 
 	def convertMaskToPolygon(self):
 		# Find contours
@@ -514,33 +511,8 @@ class Frame():
 		# Check that the frame has 4 corners
 		assert len(self.corners) == 4 and len(self.diagram_corners) == 4
 
-		# Check that the frames corners age is less than 1e+5
-		assert self.corners_age < 1e+5
-
 		# Draw white square in top left corner for text
-		cv2.rectangle(self.img, (0, 0), (200, 70), (255, 255, 255), -1)
-
-		# Add corner age to display frame
-		cv2.putText(
-			self.img,
-			f"Corner Age: {self.corners_age}",
-			(10, 30),
-			cv2.FONT_HERSHEY_SIMPLEX,
-			0.8,
-			(255, 0, 0),
-			2
-		)
-
-		# Add frame number to display frame
-		cv2.putText(
-			self.img,
-			f"Frame: {self.index}",
-			(10, 60),
-			cv2.FONT_HERSHEY_SIMPLEX,
-			0.8,
-			(255, 0, 0),
-			2
-		)
+		cv2.rectangle(self.img, (0, 0), (180, 40), (255, 255, 255), -1)
 
 		# Get the homography for the current frame
 		self.diagram = self.applyHomography(self.diagram)
@@ -553,25 +525,14 @@ class Frame():
 		small_diagram = cv2.resize(self.diagram, (0, 0), fx=scale, fy=scale)
 
 		# Add the diagram to the top right corner of the frame
-		self.img[:small_diagram.shape[0], -
-				 small_diagram.shape[1]:] = small_diagram
-
-		# Add corner age to display frame
-		cv2.putText(
-			self.img,
-			f"Corner Age: {self.corners_age}",
-			(10, 30),
-			cv2.FONT_HERSHEY_SIMPLEX,
-			0.8,
-			(255, 0, 0),
-			2
-		)
+		# self.img[:small_diagram.shape[0], -
+		# 		 small_diagram.shape[1]:] = small_diagram
 
 		# Add frame number to display frame
 		cv2.putText(
 			self.img,
-			f"Frame: {self.index}",
-			(10, 60),
+			f"Frame: {self.index:>4}",
+			(10, 30),
 			cv2.FONT_HERSHEY_SIMPLEX,
 			0.8,
 			(255, 0, 0),
@@ -689,11 +650,6 @@ class Frame():
 		frame1.corners = frame2.corners.copy()
 		frame1.diagram_corners = frame2.diagram_corners.copy()
 		frame1.side = frame2.side
-
-		frame1.corners_age = frame2.corners_age + 1
-
-		# Increase avg_movement proportional to the age of the corners
-		# avg_movement *= (frame1.corners_age ** 1.09) * 0.001 + 1
 
 		# Update corners with average movement
 		avg_movement = avg_movement.astype(int)
