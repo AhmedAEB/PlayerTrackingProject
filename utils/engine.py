@@ -48,6 +48,7 @@ class Engine():
 		# To store the kmeans model
 		self.kmeans = None
 		self.prev_players = []
+		self.features = np.empty((0, 512))
 
 	def load_config(self, path):
 		# Load config.json

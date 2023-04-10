@@ -405,7 +405,8 @@ class Frame():
 		# This is done by finding the 2 clusters with the most players in them
 		self.team_frame = self.orig_img.copy()
 
-		players = []
+		# Array to store the features of each player
+		features = []
 
 		for track in tracks:
 			x1, y1, x2, y2 = track.to_tlbr().astype(int)
@@ -440,23 +441,30 @@ class Frame():
 			hist = cv2.normalize(hist, hist).flatten()
 
 			# Add the histogram to the players array
-			players.append(hist)
+			features.append(hist)
 
-		players = np.array(players)
+		features = np.array(features)
 
 		# Flatten to 2d array
-		players = players.reshape((players.shape[0], -1))
+		features = features.reshape((features.shape[0], -1))
   
-		if self.engine.kmeans is None:
+		print(self.engine.features.shape)
+  
+		if self.engine.features.shape[0] < 1000:
+			# Concatenate the engine features with the new features
+			features = np.concatenate((self.engine.features, features), axis=0, dtype=np.float32)
+	
+			self.engine.features = features
+  
 			# Run a kmeans clustering algorithm on the players
 			self.engine.kmeans = KMeans(
 				n_clusters=2,
 				random_state=0,
 				n_init="auto"
-			).fit(players)
+			).fit(features)
 
 		# Get the labels for each player
-		labels = self.engine.kmeans.predict(players)
+		labels = self.engine.kmeans.predict(features)
   
 		# id_to_team = {}
 		# correct = 0

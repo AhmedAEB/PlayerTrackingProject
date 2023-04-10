@@ -20,6 +20,7 @@ def main():
 		skip_frames = int(skip_frames.get()),
 		show = show.get(),
 		deepsort_iou_th = float(deepsort_iou.get()),
+		init_phase_frames = int(initilisation_frames.get()),
 		# gui = gui,
 	)
 
@@ -45,6 +46,7 @@ if __name__ == "__main__":
 	nframes = GUI.create_entry("Number of Frames", "-1")
 	skip_frames = GUI.create_entry("Frames to Skip", "0")
 	deepsort_iou = GUI.create_entry("DeepSort IOU", "0.7")
+	initilisation_frames = GUI.create_entry("Initialisation Frames", "15")
 	show = GUI.create_checkbox("Show Process", True)
  
 	# Run GUI mainloop
