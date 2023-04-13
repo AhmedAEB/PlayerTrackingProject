@@ -6,6 +6,7 @@
 	"source" : "./data/input.mp4",
 
 	"save" : true,
+	"save_diagram" : false,
 	"save_path" : "./data/output.mp4",
 	
 	"yolo_weights" : "./weights/NinthYolo_x-nracheckpoint3.pt",
@@ -19,5 +20,5 @@
 	"deepsort_iou_th" : 0.6,
 	"nn_budget" : null,
 	"max_age" : 300,
-	"init_phase_frames": 15
+	"init_phase_frames": 7
 }

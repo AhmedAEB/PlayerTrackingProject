@@ -79,6 +79,18 @@ class Engine():
 			help="Path to save the output video"
 		)
 		self.parser.add_argument(
+			"--save",
+			action="store_true",
+			default=self.save,
+			help="Save the output video"
+		)
+		self.parser.add_argument(
+			"--save_diagram",
+			action="store_true",
+			default=self.save_diagram,
+			help="Save the bird's eye view diagram"
+		)
+		self.parser.add_argument(
 			"--show",
 			action="store_true",
 			default=self.show,
@@ -166,7 +178,7 @@ class Engine():
 		img = cv2.imread(self.source)
 
 		# Extract the image dimensions
-		self.w, self.h = img.shape[1], img.shape[0]
+		self.width, self.height = img.shape[1], img.shape[0]
 
 		frame = Frame(img, 0, self)
 
@@ -207,7 +219,7 @@ class Engine():
 		video = cv2.VideoCapture(self.source)
 
 		# Extract the video w, h and fps
-		self.w, self.h = int(
+		self.width, self.height = int(
 			video.get(
 				cv2.CAP_PROP_FRAME_WIDTH)), int(
 			video.get(
@@ -219,7 +231,16 @@ class Engine():
 		if self.save:
 			# Define the codec and create VideoWriter object
 			codec = cv2.VideoWriter_fourcc(*"avc1")
-			output = cv2.VideoWriter(self.save_path, codec, fps, (self.w, self.h))
+			output = cv2.VideoWriter(self.save_path, codec, fps, (self.width, self.height))
+   
+		if self.save_diagram:
+			# Get w and h of diagram
+			diagram = cv2.imread(DIAGRAM_PATH)
+      
+			# Define the codec and create VideoWriter object
+			self.save_diagram_path = self.save_path.replace(
+				".mp4", "_diagram.mp4")
+			output_diagram = cv2.VideoWriter(self.save_diagram_path, codec, fps, diagram.shape[1::-1])
 
 		# Get first frame from video by using skip_frames
 		for _ in range(self.skip_frames + 1):
@@ -303,6 +324,12 @@ class Engine():
 
 				if self.save or self.show:
 					f.saveFrame(output=output)
+
+					if self.save_diagram:
+						output_diagram.write(f.diagram)
+      
+				# Clear some memory
+				f.clearMemory()
 
 			prev_frame = frame
 
