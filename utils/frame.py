@@ -179,7 +179,7 @@ class Frame():
 		if results[0].masks is None:
 			return
 
-		self.mask = results[0].masks.masks[0].cpu().numpy().astype(np.uint8)
+		self.mask = results[0].masks.data[0].cpu().numpy().astype(np.uint8)
 
 		# Change 1 to 255 for display purposes
 		self.mask = self.mask * 255

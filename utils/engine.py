@@ -1,4 +1,5 @@
 import cv2
+import math
 import json
 import argparse
 import numpy as np
@@ -77,6 +78,12 @@ class Engine():
 			type=str,
 			default=self.save_path,
 			help="Path to save the output video"
+		)
+		self.parser.add_argument(
+			"--eval_court",
+			action="store_true",
+			default=self.eval_court,
+			help="Run the court evaluation (frame must not contain empty detection)"
 		)
 		self.parser.add_argument(
 			"--save",
@@ -242,6 +249,10 @@ class Engine():
 				".mp4", "_diagram.mp4")
 			output_diagram = cv2.VideoWriter(self.save_diagram_path, codec, fps, diagram.shape[1::-1])
 
+		if self.eval_court:
+			# Initilise variable to store differences between corners
+			self.court_errors = []
+
 		# Get first frame from video by using skip_frames
 		for _ in range(self.skip_frames + 1):
 			ret, orig = video.read()
@@ -321,6 +332,7 @@ class Engine():
 
 			while len(queue) > 0:
 				f = queue.popleft()
+				
 
 				if self.save or self.show:
 					f.saveFrame(output=output)
@@ -328,10 +340,30 @@ class Engine():
 					if self.save_diagram:
 						output_diagram.write(f.diagram)
       
+				if self.eval_court and prev_frame.index > self.init_phase_frames:
+					eval_corners = prev_frame.corners
+					prev_frame.corners = []
+					Frame.updateCorners(prev_frame, frame)
+     
+					# Compare the distance between detected corners and the optical flow corners
+					distances = []
+					for i in range(4):
+						distance = math.sqrt((eval_corners[i][0] - prev_frame.corners[i][0])**2 + (eval_corners[i][1] - prev_frame.corners[i][1])**2)
+						distances.append(distance)
+      
+					avg = sum(distances) / len(distances)
+     
+					self.court_errors.append(avg)
+      
 				# Clear some memory
 				f.clearMemory()
 
 			prev_frame = frame
+   
+		if self.eval_court:
+			self.court_errors = self.court_errors[:-1] # Remove last error as it is always 0
+			print(f"Average court error: {sum(self.court_errors)/len(self.court_errors):.6f}")
+			print(f"Standard deviation of court error: {np.std(self.court_errors):.6f}")
 
 		cv2.destroyAllWindows()
 		video.release()  # Release video
