@@ -537,6 +537,9 @@ class Frame():
 		# Display frame and debug frames
 		if self.engine.show:
 			self.displayAll()
+   
+		# Temporarily write the frame to a file
+		# cv2.imwrite(f"temp/{self.index}.png", self.img)
 
 		# Write the frame to the output video
 		output.write(self.img)

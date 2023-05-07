@@ -10,7 +10,8 @@
 	"eval_court": false,
 	"save_path" : "./data/output.mp4",
 	
-	"yolo_weights" : "./weights/NinthYolo_x-nracheckpoint3.pt",
+	"yolos_weights" : "./weights/NinthYolo_x-nracheckpoint3.pt",
+	"yolo_weights": "./weights/best.pt",
 	"iou_th" : 0.6,
 	"conf_th" : 0.1,
 
