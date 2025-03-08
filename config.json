@@ -6,9 +6,12 @@
 	"source" : "./data/input.mp4",
 
 	"save" : true,
+	"save_diagram" : false,
+	"eval_court": false,
 	"save_path" : "./data/output.mp4",
 	
-	"yolo_weights" : "./weights/NinthYolo_x-nracheckpoint3.pt",
+	"yolos_weights" : "./weights/NinthYolo_x-nracheckpoint3.pt",
+	"yolo_weights": "./weights/best.pt",
 	"iou_th" : 0.6,
 	"conf_th" : 0.1,
 
@@ -19,5 +22,5 @@
 	"deepsort_iou_th" : 0.6,
 	"nn_budget" : null,
 	"max_age" : 300,
-	"init_phase_frames": 15
+	"init_phase_frames": 7
 }

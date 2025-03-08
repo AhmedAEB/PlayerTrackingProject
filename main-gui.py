@@ -20,14 +20,12 @@ def main():
 		skip_frames = int(skip_frames.get()),
 		show = show.get(),
 		deepsort_iou_th = float(deepsort_iou.get()),
+		save_diagram = save_diagram.get(),
 		# gui = gui,
 	)
 
 	# Enable button and change text to "Run"
 	GUI.button.config(text="Run", state="normal")
-
-	# Move gui to top
-	GUI.root.wm_attributes("-topmost", 1)
 
 	# Print time taken to run
 	print(f"Time taken: {perf_counter()-start:.2f} s")
@@ -45,6 +43,7 @@ if __name__ == "__main__":
 	nframes = GUI.create_entry("Number of Frames", "-1")
 	skip_frames = GUI.create_entry("Frames to Skip", "0")
 	deepsort_iou = GUI.create_entry("DeepSort IOU", "0.7")
+	save_diagram = GUI.create_checkbox("Save Diagram", False)
 	show = GUI.create_checkbox("Show Process", True)
  
 	# Run GUI mainloop

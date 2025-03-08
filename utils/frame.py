@@ -2,6 +2,8 @@ from typing import List
 
 import cv2
 import numpy as np
+import random
+random.seed(0) # For reproducibility
 
 from utils.deepsort import DeepSort, BTrack
 from ultralytics import YOLO
@@ -29,7 +31,6 @@ class Frame():
 		self.referees = []
 		self.diagram_corners = []
 		self.side = None
-		self.corners_age = 1e+5
 
 		# Debug frames
 		self.mask = None
@@ -178,18 +179,18 @@ class Frame():
 		if results[0].masks is None:
 			return
 
-		self.mask = results[0].masks.masks[0].cpu().numpy().astype(np.uint8)
+		self.mask = results[0].masks.data[0].cpu().numpy().astype(np.uint8)
 
 		# Change 1 to 255 for display purposes
 		self.mask = self.mask * 255
 
 		# Calculate the percentage area of the detected mask (white pixels)
-		mask_area = np.sum(self.mask == 255) / (self.engine.w * self.engine.h)
+		mask_area = np.sum(self.mask == 255) / (self.engine.width * self.engine.height)
 
 		# If the mask is too small, or is within 1% of the image top or bottom,
 		# remove it
 		if mask_area < 0.025 or \
-				self.mask[:self.engine.w // 100, :].any() or self.mask[-self.engine.w // 100:, :].any():
+				self.mask[:self.engine.width // 100, :].any() or self.mask[-self.engine.width // 100:, :].any():
 			return
 
 		# Convert the mask to a polygon
@@ -197,8 +198,6 @@ class Frame():
 
 		# Get the corner points of the polygon
 		self.getCornerPoints()
-
-		self.corners_age = 0
 
 	def convertMaskToPolygon(self):
 		# Find contours
@@ -219,14 +218,14 @@ class Frame():
 		cv2.drawContours(self.polygon, [polygon], 0, 255, -1)
   
 		# Check which side has more white pixels
-		left = np.sum(self.polygon[:, :self.engine.w // 2] == 255)
-		right = np.sum(self.polygon[:, self.engine.w // 2:] == 255)
+		left = np.sum(self.polygon[:, :self.engine.width // 2] == 255)
+		right = np.sum(self.polygon[:, self.engine.width // 2:] == 255)
 
 		self.side = "left" if left > right else "right"
 
 	def getCornerPoints(self):
 		# Polygon is too close to the left side of the image
-		if self.polygon[:, :self.engine.w // 50].any():
+		if self.polygon[:, :self.engine.width // 50].any():
 			# Loop from right to left until a non-zero pixel is found
 			for i in range(self.polygon.shape[1] - 1, -1, -1):
 				# Check if the column contains any white pixels
@@ -236,7 +235,7 @@ class Frame():
 					self.side = "left"
 					return
 
-		elif self.polygon[:, -self.engine.w // 50:].any():
+		elif self.polygon[:, -self.engine.width // 50:].any():
 			# Loop from left to right until a non-zero pixel is found
 			for i in range(self.polygon.shape[1]):
 				# Check if the column contains any white pixels
@@ -309,9 +308,15 @@ class Frame():
 
 		# Get the transformation matrix
 		M = cv2.getPerspectiveTransform(self.corners, self.diagram_corners)
+  
+		for track in self.players:
+			track.is_referee = False
+
+		for track in self.referees:
+			track.is_referee = True
 
 		# Loop through the players and draw their positions on the diagram
-		for track in self.players:
+		for track in self.players + self.referees:
 			# Get the player's position
 			xyxy = track.to_tlbr().astype(int)
 
@@ -325,31 +330,23 @@ class Frame():
 			# Transform the player's position
 			xy = cv2.perspectiveTransform(xy, M)[0][0]
    
+			x, y = xy.astype(int)
+   
 			# Get the player's team COLOUR
-			COLOUR = [TEAM_A_COLOUR, TEAM_B_COLOUR][track.team]
+			if track.is_referee:
+				color = REFEREE_COLOUR
+			else:
+				color = [TEAM_A_COLOUR, TEAM_B_COLOUR][track.team]
 
 			# Draw the player's position on the diagram based on their team
-			cv2.circle(diagram, tuple(xy.astype(int)),
-					   15, COLOUR, -1)
-
-		# Do the same for the referees
-		for track in self.referees:
-			# Get the referee's position
-			xyxy = track.to_tlbr().astype(int)
-
-			# Get the referee's centre
-			x = (xyxy[0] + xyxy[2]) // 2
-			y = xyxy[3]
-
-			# Get the referee's position on the diagram
-			xy = np.array([[x, y]], dtype=np.float32)[np.newaxis]
-
-			# Transform the referee's position
-			xy = cv2.perspectiveTransform(xy, M)[0][0]
-
-			# Draw the referee's position on the diagram
-			cv2.circle(diagram, tuple(xy.astype(int)),
-					   15, REFEREE_COLOUR, -1)
+			cv2.circle(diagram, (x, y), 20, color, -1)
+   
+			# Calculate the size of the text box
+			(w, h), _ = cv2.getTextSize(str(track.track_id), cv2.FONT_HERSHEY_SIMPLEX, 1, 2)
+   
+			# Place the id of the player on the diagram
+			cv2.putText(diagram, str(track.track_id), (x - w // 2, y + h // 2),
+						cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
 
 		# Display corners on diagram
 		for i, corner in enumerate(self.diagram_corners):
@@ -460,37 +457,32 @@ class Frame():
 
 		# Get the labels for each player
 		labels = self.engine.kmeans.predict(players)
-  
-		# id_to_team = {}
-		# correct = 0
-		# total = 0
-  
-		# for track in prev_tracks:
-		# 	id_to_team[track.track_id] = track.team
    
 		for i, track in enumerate(tracks):
 			track.team = labels[i]
-   
-		# 	if track.track_id in id_to_team:
-		# 		if id_to_team[track.track_id] == track.team:
-		# 			correct += 1
-		# 		total += 1
-
-		# accuracy = correct / total if total > 0 else 0
-
-		# if accuracy < 0.5 and len(prev_tracks) > 0:
-		# 	print("Swapped Teams")
-		# 	# Swap the teams if the accuracy is less than 50%
-		# 	for track in tracks:
-		# 		track.team = 1 - track.team
 
 		# Calculate final team for each track based on team prediction history
 		for track in tracks:
-			track.prev_teams.append(track.team)
+			if len(track.prev_teams) == 0:
+				track.prev_teams.append(track.team)
+				continue
+	  
+			history_same_percentage = sum(
+				1 for x in track.prev_teams if x == track.team) / len(track.prev_teams)
+   
+			if history_same_percentage < 0.5:
+				# Since the history is less than 50% the same, add the new team to the history randomly, this is to prevent the team from changing too quickly
+				p = random.random()
+				if p < 0.5:
+					track.prev_teams.append(track.team)
+			else:
+				track.prev_teams.append(track.team)
 
-			# Set the team to the most common team in the last 20 frames
+			
 			track.team = max(
-				set(track.prev_teams[-20:]), key=track.prev_teams[-20:].count)
+				set(track.prev_teams), key=track.prev_teams.count)
+   
+			track.prev_teams = track.prev_teams[-50:] # Keep only the last 50 frames
 
 		return tracks
 
@@ -514,33 +506,8 @@ class Frame():
 		# Check that the frame has 4 corners
 		assert len(self.corners) == 4 and len(self.diagram_corners) == 4
 
-		# Check that the frames corners age is less than 1e+5
-		assert self.corners_age < 1e+5
-
 		# Draw white square in top left corner for text
-		cv2.rectangle(self.img, (0, 0), (200, 70), (255, 255, 255), -1)
-
-		# Add corner age to display frame
-		cv2.putText(
-			self.img,
-			f"Corner Age: {self.corners_age}",
-			(10, 30),
-			cv2.FONT_HERSHEY_SIMPLEX,
-			0.8,
-			(255, 0, 0),
-			2
-		)
-
-		# Add frame number to display frame
-		cv2.putText(
-			self.img,
-			f"Frame: {self.index}",
-			(10, 60),
-			cv2.FONT_HERSHEY_SIMPLEX,
-			0.8,
-			(255, 0, 0),
-			2
-		)
+		cv2.rectangle(self.img, (0, 0), (180, 40), (255, 255, 255), -1)
 
 		# Get the homography for the current frame
 		self.diagram = self.applyHomography(self.diagram)
@@ -556,22 +523,11 @@ class Frame():
 		self.img[:small_diagram.shape[0], -
 				 small_diagram.shape[1]:] = small_diagram
 
-		# Add corner age to display frame
-		cv2.putText(
-			self.img,
-			f"Corner Age: {self.corners_age}",
-			(10, 30),
-			cv2.FONT_HERSHEY_SIMPLEX,
-			0.8,
-			(255, 0, 0),
-			2
-		)
-
 		# Add frame number to display frame
 		cv2.putText(
 			self.img,
-			f"Frame: {self.index}",
-			(10, 60),
+			f"Frame: {self.index:>4}",
+			(10, 30),
 			cv2.FONT_HERSHEY_SIMPLEX,
 			0.8,
 			(255, 0, 0),
@@ -581,12 +537,12 @@ class Frame():
 		# Display frame and debug frames
 		if self.engine.show:
 			self.displayAll()
+   
+		# Temporarily write the frame to a file
+		# cv2.imwrite(f"temp/{self.index}.png", self.img)
 
 		# Write the frame to the output video
 		output.write(self.img)
-
-		# Clear some memory
-		self.clearMemory()
 
 	def save_img(self, path: str):
 		# Check if frame has 4 corners
@@ -689,11 +645,6 @@ class Frame():
 		frame1.corners = frame2.corners.copy()
 		frame1.diagram_corners = frame2.diagram_corners.copy()
 		frame1.side = frame2.side
-
-		frame1.corners_age = frame2.corners_age + 1
-
-		# Increase avg_movement proportional to the age of the corners
-		# avg_movement *= (frame1.corners_age ** 1.09) * 0.001 + 1
 
 		# Update corners with average movement
 		avg_movement = avg_movement.astype(int)

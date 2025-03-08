@@ -53,9 +53,12 @@ class GUI():
 		self.root.geometry(
       		"+{}+{}".format(
             	0,
-                self.root.winfo_screenheight() - self.root.winfo_reqheight()
+                self.root.winfo_screenheight() - self.root.winfo_reqheight() - 50
             )
         )
+  
+		# Move gui to top
+		self.root.wm_attributes("-topmost", 1)
      
 		# Run mainloop
 		self.root.mainloop()
