@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 
 from utils.deepsort import DeepSort
 from utils.frame import Frame
+from utils.performance import performance_logger
 
 DIAGRAM_PATH = "diagram.jpg"
 
@@ -202,9 +203,11 @@ class Engine():
         return frame.save_img(self.save_path)
 
     def track(self, **override_args):
+        performance_logger.start_timer("total_tracking")
         self.override_and_load_yolo(override_args)
 
         # Initialize DeepSORT trackers for each players and referee
+        performance_logger.start_timer("init_trackers")
         self.player_tracker = DeepSort(
             self.deepsort_weights,
             self.max_cos_dist,
@@ -221,8 +224,10 @@ class Engine():
             self.max_age,
             self.init_phase_frames
         )
+        performance_logger.stop_timer("init_trackers")
 
         # Get the video from the source
+        performance_logger.start_timer("video_setup")
         video = cv2.VideoCapture(self.source)
 
         # Extract the video w, h and fps
@@ -260,6 +265,7 @@ class Engine():
             # Check if video has ended
             if not ret:
                 break
+        performance_logger.stop_timer("video_setup")
 
         # Queue for storing previous frames for optical flow
         queue = deque()
@@ -271,21 +277,28 @@ class Engine():
         total_frames -= self.skip_frames if total_frames > self.skip_frames else 0
 
         # Loop through all frames
+        performance_logger.start_timer("frame_processing_loop")
         for i in trange(total_frames, desc="Processing...", unit="frames"):
             # Check if video has ended
             if not ret:
                 break
 
+            performance_logger.start_timer("frame_init")
             frame = Frame(orig, i, self)
+            performance_logger.stop_timer("frame_init")
 
             # Get next frame from video
             ret, orig = video.read()
 
             # Get corners of free throw area if it exists
+            performance_logger.start_timer("get_corners")
             frame.getCorners()
+            performance_logger.stop_timer("get_corners")
    
             # Update deepsort trackers for players and referee + plot tracks
+            performance_logger.start_timer("track_frame")
             frame.track()
+            performance_logger.stop_timer("track_frame")
 
             # If mask is None then there is no free throw area so append frame
             # to queue
@@ -296,6 +309,7 @@ class Engine():
                 continue
 
             # Frame has corners
+            performance_logger.start_timer("optical_flow")
             if prev_frame is None and len(frame.corners) == 4:
                 # Only do backward optical flow from current frame to all qeued
                 # frames
@@ -329,13 +343,16 @@ class Engine():
                     next_frame = qframe
             else:
                 queue.appendleft(prev_frame)
+            performance_logger.stop_timer("optical_flow")
 
+            performance_logger.start_timer("process_queue")
             while len(queue) > 0:
                 f = queue.popleft()
                 
-
                 if self.save or self.show:
+                    performance_logger.start_timer("save_frame")
                     f.saveFrame(output=output)
+                    performance_logger.stop_timer("save_frame")
 
                     if self.save_diagram:
                         output_diagram.write(f.diagram)
@@ -354,10 +371,13 @@ class Engine():
       
                 # Clear some memory
                 f.clearMemory()
+            performance_logger.stop_timer("process_queue")
 
             prev_frame = frame
+        performance_logger.stop_timer("frame_processing_loop")
    
         if self.eval_court:
+            performance_logger.start_timer("court_evaluation")
             self.court_errors = self.court_errors[:-1] # Remove last error as it is always 0
             print(f"Average court error: {sum(self.court_errors)/len(self.court_errors):.6f}")
             print(f"Standard deviation of court error: {np.std(self.court_errors):.6f}")
@@ -373,6 +393,12 @@ class Engine():
             # plt.ylabel("Error (px)")
             # plt.title("Error between detected corners and optical flow corners")
             # plt.show()
+            performance_logger.stop_timer("court_evaluation")
 
         cv2.destroyAllWindows()
         video.release()  # Release video
+        
+        performance_logger.stop_timer("total_tracking")
+        
+        # Print performance summary
+        performance_logger.print_summary()

@@ -3,10 +3,12 @@ from time import perf_counter
 
 from utils.engine import Engine
 from utils.gui import GUI
+from utils.performance import performance_logger
 
 def main():
 	# Store start time
 	start = perf_counter()
+	performance_logger.start_timer("gui_processing")
 
 	# Disable button and change text to "Processing..."
 	GUI.button.config(text="Processing...", state="disabled")
@@ -28,13 +30,17 @@ def main():
 	GUI.button.config(text="Run", state="normal")
 
 	# Print time taken to run
+	performance_logger.stop_timer("gui_processing")
 	print(f"Time taken: {perf_counter()-start:.2f} s")
 
 if __name__ == "__main__":
 	# Initialize engine
+	performance_logger.start_timer("engine_initialization")
 	ENGINE = Engine()
+	performance_logger.stop_timer("engine_initialization")
 
 	# Initialize GUI
+	performance_logger.start_timer("gui_initialization")
 	GUI = GUI(main)
 
 	# Create entries
@@ -45,6 +51,7 @@ if __name__ == "__main__":
 	deepsort_iou = GUI.create_entry("DeepSort IOU", "0.7")
 	save_diagram = GUI.create_checkbox("Save Diagram", False)
 	show = GUI.create_checkbox("Show Process", True)
+	performance_logger.stop_timer("gui_initialization")
  
 	# Run GUI mainloop
 	GUI.run(main)

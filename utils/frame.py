@@ -7,6 +7,7 @@ random.seed(0) # For reproducibility
 
 from utils.deepsort import DeepSort, BTrack
 from ultralytics import YOLO
+from utils.performance import performance_logger
 
 from sklearn.cluster import KMeans
 
@@ -81,12 +82,14 @@ class Frame():
 
 	def detect_players_and_referees(self):
 		# Use YOLO to detect players and referees
+		performance_logger.start_timer("yolo_detection")
 		results = self.engine.yolov8(
 			source=self.orig_img,
 			verbose=False,
 			conf = self.engine.conf_th,
 			iou = self.engine.iou_th,
 		)
+		performance_logger.stop_timer("yolo_detection")
 		
 		# Return the detection as a Result object
 		return results[0].cpu().numpy()
@@ -114,16 +117,21 @@ class Frame():
 			ref_scores = scores[classes == 1]
 
 			# Update the trackers
+			performance_logger.start_timer("player_tracker_update")
 			player_tracks = self.engine.player_tracker.update(
 				self.orig_img,
 				player_boxes,
 				player_scores
 			)
+			performance_logger.stop_timer("player_tracker_update")
+			
+			performance_logger.start_timer("referee_tracker_update")
 			referee_tracks = self.engine.referee_tracker.update(
 				self.orig_img,
 				ref_boxes,
 				ref_scores
 			)
+			performance_logger.stop_timer("referee_tracker_update")
    
 			for track in player_tracks:
 				self.players.append(BTrack.fake_track(track.to_tlbr(), track.track_id, track.prev_teams))
@@ -136,11 +144,15 @@ class Frame():
 				self.xyxy.append(track.to_tlbr().astype(int))
 
 			# Apply team classification to players
+			performance_logger.start_timer("team_classification")
 			self.players = self.splitTeams(self.engine.prev_players, self.players)
+			performance_logger.stop_timer("team_classification")
 			self.engine.prev_players = self.players
 
+			performance_logger.start_timer("plot_tracks")
 			self.plotTracks(self.referees, [REFEREE_COLOUR], ['Referee'])
 			self.plotTracks(self.players, [TEAM_A_COLOUR, TEAM_B_COLOUR], ['Team A', 'Team B'])
+			performance_logger.stop_timer("plot_tracks")
 
 	def detect_image(self):
 		# Use YOLO to detect players and referees
@@ -168,6 +180,7 @@ class Frame():
 
 	def getCorners(self):
 		# Use yolo to detect the free throw area
+		performance_logger.start_timer("yolo_segmentation")
 		results = self.engine.yolov8_seg(
 			source=self.orig_img,
 			retina_masks=True,
@@ -175,6 +188,7 @@ class Frame():
 			conf = 0.8,
 			verbose=False
 		)
+		performance_logger.stop_timer("yolo_segmentation")
 
 		if results[0].masks is None:
 			return
@@ -194,10 +208,14 @@ class Frame():
 			return
 
 		# Convert the mask to a polygon
+		performance_logger.start_timer("mask_to_polygon")
 		self.convertMaskToPolygon()
+		performance_logger.stop_timer("mask_to_polygon")
 
 		# Get the corner points of the polygon
+		performance_logger.start_timer("get_corner_points")
 		self.getCornerPoints()
+		performance_logger.stop_timer("get_corner_points")
 
 	def convertMaskToPolygon(self):
 		# Find contours
@@ -398,7 +416,11 @@ class Frame():
 
 	def splitTeams(self, prev_tracks, tracks):
 		# Exit early if there are not enough tracks to split into 2 teams
+		performance_logger.start_timer("team_splitting")
 		if len(tracks) < 2:
+			for track in tracks:
+				track.team = 0
+			performance_logger.stop_timer("team_splitting")
 			return tracks
 
 		# Run a clustering algorithm on the xyxy coordinates of the players to split them into 2 teams
@@ -484,6 +506,7 @@ class Frame():
    
 			track.prev_teams = track.prev_teams[-50:] # Keep only the last 50 frames
 
+		performance_logger.stop_timer("team_splitting")
 		return tracks
 
 	def plotCorners(self):
@@ -510,7 +533,9 @@ class Frame():
 		cv2.rectangle(self.img, (0, 0), (180, 40), (255, 255, 255), -1)
 
 		# Get the homography for the current frame
+		performance_logger.start_timer("apply_homography")
 		self.diagram = self.applyHomography(self.diagram)
+		performance_logger.stop_timer("apply_homography")
 
 		# Calculate scale needed (diagram width/frame width)
 		scale = self.img.shape[1] / self.diagram.shape[1] / 2.5
@@ -568,6 +593,7 @@ class Frame():
 
 	@staticmethod
 	def updateCorners(frame1, frame2):
+		performance_logger.start_timer("update_corners")
 		if len(frame1.corners) == 1 and frame1.side == frame2.side:
 			if frame1.side == "left":
 				# Compare the top right corner of frame2 (frame [1]) with the
@@ -586,6 +612,7 @@ class Frame():
 			frame1.diagram_corners = frame2.diagram_corners.copy()
 
 			frame1.plotCorners()
+			performance_logger.stop_timer("update_corners")
 			return
 
 		frame1_img = frame1.orig_img.copy()
@@ -653,3 +680,4 @@ class Frame():
 			frame1.corners[i] += avg_movement
 
 		frame1.plotCorners()
+		performance_logger.stop_timer("update_corners")
